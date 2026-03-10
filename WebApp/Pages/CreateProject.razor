@@ -1,0 +1,92 @@
+@page "/projects/create"
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+<MudPaper Class="pa-4 mx-auto mt-8" Style="max-width:600px;">
+    <MudText Typo="Typo.h5" Class="mb-4">Crear Nuevo Proyecto</MudText>
+    <EditForm Model="@createModel" OnValidSubmit="HandleCreate">
+        <DataAnnotationsValidator />
+        <MudTextField @bind-Value="createModel.Name" 
+                      Label="Nombre del Proyecto" 
+                      Variant="Variant.Outlined" 
+                      Required="true" 
+                      Class="mb-3"
+                      Counter="100"
+                      MaxLength="100" />
+        <MudTextField @bind-Value="createModel.Description" 
+                      Label="Descripción" 
+                      Variant="Variant.Outlined" 
+                      Lines="5"
+                      Class="mb-3"
+                      Counter="500"
+                      MaxLength="500" />
+        <MudStack Row="true" Justify="Justify.SpaceBetween">
+            <MudButton Variant="Variant.Text" 
+                       OnClick="Cancel">
+                Cancelar
+            </MudButton>
+            <MudButton ButtonType="ButtonType.Submit" 
+                       Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       Disabled="@isSubmitting">
+                @(isSubmitting ? "Creando..." : "Crear Proyecto")
+            </MudButton>
+        </MudStack>
+    </EditForm>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-2">@errorMessage</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    private CreateModel createModel = new();
+    private bool isSubmitting = false;
+    private string errorMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+
+    private async Task HandleCreate()
+    {
+        errorMessage = string.Empty;
+        isSubmitting = true;
+        try
+        {
+            var request = new WebApp.Models.Projects.CreateProjectRequest(
+                createModel.Name, 
+                createModel.Description);
+            
+            var project = await ProjectService.CreateAsync(request);
+            if (project != null)
+            {
+                Navigation.NavigateTo($"/projects/{project.IdProject}");
+            }
+            else
+            {
+                errorMessage = "Error al crear el proyecto. Inténtalo de nuevo.";
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/projects");
+    }
+
+    public class CreateModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+}

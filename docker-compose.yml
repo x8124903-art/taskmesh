@@ -1,0 +1,153 @@
+# Docker Compose file for TaskMesh Fase 1
+version: '3.8'
+
+services:
+  mysql:
+    build:
+      context: ./Scripts
+      dockerfile: Dockerfile.mysql
+    container_name: taskmesh-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: TaskMesh2024!
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: taskmesh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  msauth:
+    build:
+      context: ./MsAuth
+      dockerfile: Dockerfile
+    container_name: taskmesh-msauth
+    ports:
+      - "44310:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Database__Type: MySql
+      Database__DefaultConnection: "server=mysql;uid=root;pwd=TaskMesh2024!;database=taskmesh_auth"
+      RedisCache__ConnectionString: "redis:6379"
+      RedisCache__Enabled: "true"
+      Jwt__SecretKey: "super-secret-key-change-in-production-min-256-bits"
+      Jwt__Issuer: "taskmesh-auth"
+      Jwt__Audience: "taskmesh-api"
+      Jwt__AccessTokenExpirationMinutes: "15"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  msgateway:
+    build:
+      context: ./MsGateway
+      dockerfile: Dockerfile
+    container_name: taskmesh-msgateway
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Jwt__SecretKey: "super-secret-key-change-in-production-min-256-bits"
+      Jwt__Issuer: "taskmesh-auth"
+      Jwt__Audience: "taskmesh-api"
+      ReverseProxy__Clusters__auth-cluster__Destinations__auth-service__Address: "http://msauth:8080"
+      ReverseProxy__Clusters__projects-cluster__Destinations__projects-service__Address: "http://msprojects:8080"
+    depends_on:
+      msauth:
+        condition: service_healthy
+      msprojects:
+        condition: service_healthy
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  msprojects:
+    build:
+      context: ./MsProjects
+      dockerfile: Dockerfile
+    container_name: taskmesh-msprojects
+    ports:
+      - "44311:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Database__Type: MySql
+      Database__DefaultConnection: "server=mysql;uid=root;pwd=TaskMesh2024!;database=taskmesh_projects"
+      RedisCache__ConnectionString: "redis:6379"
+      RedisCache__Enabled: "true"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  webapp:
+    build:
+      context: ./WebApp
+      dockerfile: Dockerfile
+    container_name: taskmesh-webapp
+    ports:
+      - "3000:80"
+    environment:
+      ApiBaseUrl: "http://msgateway:8080"
+    depends_on:
+      - msgateway
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  taskmesh-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:

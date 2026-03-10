@@ -1,0 +1,456 @@
+@page "/projects/{id:int}"
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (project == null)
+{
+    <MudAlert Severity="Severity.Error">Proyecto no encontrado</MudAlert>
+}
+else
+{
+    <MudBreadcrumbs Items="breadcrumbs" Class="mb-4"></MudBreadcrumbs>
+    
+    <MudText Typo="Typo.h4" Class="mb-4">@project.Name</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" @bind-ActivePanelIndex="activeTab">
+        <MudTabPanel Text="Información" Icon="@Icons.Material.Filled.Info">
+            <MudPaper Class="pa-4 mt-4" Elevation="3">
+                <MudStack Spacing="4">
+                    <div>
+                        <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Class="mr-2" />
+                            Descripción
+                        </MudText>
+                        <MudText Typo="Typo.body1" Style="white-space: pre-wrap;">
+                            @(string.IsNullOrEmpty(project.Description) ? "Sin descripción" : project.Description)
+                        </MudText>
+                    </div>
+                    
+                    <MudDivider />
+                    
+                    <MudGrid>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Estado</MudText>
+                                    <MudChip Color="GetStatusColor(project.StatusName)" Variant="Variant.Filled" Size="Size.Medium">
+                                        @project.StatusName
+                                    </MudChip>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Creado por</MudText>
+                                    <MudTooltip Text="@($"Creado por: {project.CreatedByName}")">
+                                        <MudText Typo="Typo.body1" Style="font-weight: 500; cursor: help;">
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                            @project.CreatedByName
+                                        </MudText>
+                                    </MudTooltip>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Fecha de Creación</MudText>
+                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                        <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" Class="mr-1" />
+                                        @project.CreatedAt.ToString("dd/MM/yyyy")
+                                    </MudText>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Miembros</MudText>
+                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Class="mr-1" />
+                                        @members.Count
+                                    </MudText>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudStack>
+            </MudPaper>
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Miembros" Icon="@Icons.Material.Filled.People">
+            <MudPaper Class="pa-4 mt-4">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-4">
+                    <MudText Typo="Typo.h6">Miembros del Proyecto</MudText>
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               StartIcon="@Icons.Material.Filled.PersonAdd"
+                               OnClick="OpenInviteDialog">
+                        Invitar Miembro
+                    </MudButton>
+                </MudStack>
+                
+                @if (loadingMembers)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else if (members.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info">No hay miembros aún. ¡Invita a alguien!</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="@members" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Usuario</MudTh>
+                            <MudTh>Email</MudTh>
+                            <MudTh>Rol</MudTh>
+                            <MudTh>Fecha Ingreso</MudTh>
+                            <MudTh>Acciones</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Usuario">@context.UserName</MudTd>
+                            <MudTd DataLabel="Email">@context.Email</MudTd>
+                            <MudTd DataLabel="Rol">
+                                <MudChip Size="Size.Small" Color="GetRoleColor(context.RoleName)">
+                                    @context.RoleName
+                                </MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Fecha">@context.JoinedAt?.ToString("dd/MM/yyyy")</MudTd>
+                            <MudTd DataLabel="Acciones">
+                                @if (context.RoleName != "Owner" && canManageMembers)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => ChangeRole(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                   Size="Size.Small" 
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => RemoveMember(context))" />
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Configuración" Icon="@Icons.Material.Filled.Settings">
+            <MudPaper Class="pa-4 mt-4" Elevation="3">
+                <MudText Typo="Typo.h6" Class="mb-4">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Medium" Class="mr-2" />
+                    Configuración del Proyecto
+                </MudText>
+                @if (canEdit)
+                {
+                    <EditForm Model="@editModel" OnValidSubmit="SaveChanges">
+                        <MudGrid>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="editModel.Name" 
+                                              Label="Nombre del Proyecto" 
+                                              Variant="Variant.Outlined"
+                                              Required="true"
+                                              RequiredError="El nombre es requerido" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="editModel.Description" 
+                                              Label="Descripción" 
+                                              Variant="Variant.Outlined"
+                                              Lines="5"
+                                              Placeholder="Describe de qué trata este proyecto..." />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect @bind-Value="editModel.Status" 
+                                           Label="Estado" 
+                                           Variant="Variant.Outlined"
+                                           Required="true">
+                                    <MudSelectItem Value="@("Active")">Activo</MudSelectItem>
+                                    <MudSelectItem Value="@("Paused")">Pausado</MudSelectItem>
+                                    <MudSelectItem Value="@("Archived")">Archivado</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudDivider Class="my-3" />
+                                <MudButton ButtonType="ButtonType.Submit" 
+                                           Variant="Variant.Filled" 
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Save"
+                                           Disabled="@saving">
+                                    @(saving ? "Guardando..." : "Guardar Cambios")
+                                </MudButton>
+                            </MudItem>
+                        </MudGrid>
+                    </EditForm>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        <MudText>No tienes permisos para editar este proyecto. Solo los propietarios y administradores pueden modificar la configuración.</MudText>
+                    </MudAlert>
+                }
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private WebApp.Models.Projects.Project? project;
+    private List<WebApp.Models.Projects.ProjectMember> members = new();
+    private bool loading = true;
+    private bool loadingMembers = false;
+    private bool saving = false;
+    private int activeTab = 0;
+    private bool canEdit = false;
+    private bool canManageMembers = false;
+    private EditProjectModel editModel = new();
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        
+        await LoadProjectAsync();
+    }
+
+    private async Task LoadProjectAsync()
+    {
+        loading = true;
+        try
+        {
+            project = await ProjectService.GetByIdAsync(Id);
+            if (project != null)
+            {
+                breadcrumbs = new List<BreadcrumbItem>
+                {
+                    new BreadcrumbItem("Proyectos", href: "/projects"),
+                    new BreadcrumbItem(project.Name, href: null, disabled: true)
+                };
+                
+                editModel.Name = project.Name;
+                editModel.Description = project.Description;
+                editModel.Status = project.StatusName;
+                
+                await LoadMembersAsync();
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadMembersAsync()
+    {
+        loadingMembers = true;
+        try
+        {
+            members = await ProjectService.GetMembersAsync(Id);
+            
+            var currentUserId = AuthService.CurrentUser?.Id;
+            if (currentUserId.HasValue)
+            {
+                var currentUserMember = members.FirstOrDefault(m => m.UserId == currentUserId.Value);
+                if (currentUserMember != null)
+                {
+                    canEdit = currentUserMember.RoleName == "Owner" || currentUserMember.RoleName == "Admin";
+                    canManageMembers = canEdit;
+                }
+            }
+        }
+        catch
+        {
+            members = new List<WebApp.Models.Projects.ProjectMember>();
+        }
+        finally
+        {
+            loadingMembers = false;
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        saving = true;
+        try
+        {
+            var success = await ProjectService.UpdateAsync(Id, editModel.Name, editModel.Description, editModel.Status);
+            if (success)
+            {
+                if (project != null)
+                {
+                    project.Name = editModel.Name;
+                    project.Description = editModel.Description;
+                    project.StatusName = editModel.Status;
+                    
+                    breadcrumbs = new List<BreadcrumbItem>
+                    {
+                        new BreadcrumbItem("Proyectos", href: "/projects"),
+                        new BreadcrumbItem(project.Name, href: null, disabled: true)
+                    };
+                }
+                Snackbar.Add("Proyecto actualizado correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Error al actualizar el proyecto", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task OpenInviteDialog()
+    {
+        if (!canManageMembers || project == null)
+        {
+            Snackbar.Add("No tienes permisos para invitar miembros", Severity.Warning);
+            return;
+        }
+        
+        var parameters = new DialogParameters
+        {
+            ["ProjectId"] = Id
+        };
+        
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+        
+        var dialog = await DialogService.ShowAsync<InviteMemberDialog>("Invitar Miembro al Proyecto", parameters, options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled)
+        {
+            await LoadMembersAsync();
+        }
+    }
+
+    private async Task ChangeRole(WebApp.Models.Projects.ProjectMember member)
+    {
+        var currentUserId = AuthService.CurrentUser?.Id;
+        if (currentUserId == member.UserId)
+        {
+            Snackbar.Add("No puedes cambiar tu propio rol", Severity.Warning);
+            return;
+        }
+        
+        var parameters = new DialogParameters
+        {
+            ["Member"] = member
+        };
+        
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+        
+        var dialog = await DialogService.ShowAsync<ChangeRoleDialog>("Cambiar Rol", parameters, options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled && result.Data is string newRole)
+        {
+            try
+            {
+                var success = await ProjectService.ChangeRoleAsync(Id, member.UserId, newRole);
+                if (success)
+                {
+                    Snackbar.Add($"Rol de {member.UserName} cambiado a {newRole}", Severity.Success);
+                    await LoadMembersAsync();
+                }
+                else
+                {
+                    Snackbar.Add("Error al cambiar el rol", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RemoveMember(WebApp.Models.Projects.ProjectMember member)
+    {
+        var currentUserId = AuthService.CurrentUser?.Id;
+        if (currentUserId == member.UserId)
+        {
+            Snackbar.Add("No puedes eliminarte a ti mismo", Severity.Warning);
+            return;
+        }
+        
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Confirmar eliminación",
+            $"¿Estás seguro de que deseas eliminar a {member.UserName} del proyecto?",
+            yesText: "Eliminar",
+            cancelText: "Cancelar");
+        
+        if (confirm == true)
+        {
+            try
+            {
+                var success = await ProjectService.RemoveMemberAsync(Id, member.UserId);
+                if (success)
+                {
+                    Snackbar.Add($"{member.UserName} ha sido eliminado del proyecto", Severity.Success);
+                    await LoadMembersAsync();
+                }
+                else
+                {
+                    Snackbar.Add("Error al eliminar el miembro", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Archived" => Color.Default,
+        "Paused" => Color.Warning,
+        _ => Color.Info
+    };
+
+    private Color GetRoleColor(string role) => role switch
+    {
+        "Owner" => Color.Error,
+        "Admin" => Color.Warning,
+        "Member" => Color.Default,
+        "Viewer" => Color.Default,
+        _ => Color.Info
+    };
+
+    public class EditProjectModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Status { get; set; } = "Active";
+    }
+}

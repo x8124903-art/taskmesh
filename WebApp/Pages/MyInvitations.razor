@@ -1,0 +1,236 @@
+@page "/invitations"
+@using WebApp.Services
+@using WebApp.Models.Projects
+@inject AuthService AuthService
+@inject ProjectInvitationApiService InvitationService
+@inject ISnackbar Snackbar
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Mis Invitaciones</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" @bind-ActivePanelIndex="@_activeTab">
+        <MudTabPanel Text="Pendientes" Icon="@Icons.Material.Filled.HourglassEmpty">
+            @if (_loading)
+            {
+                <div class="d-flex justify-center pa-4">
+                    <MudProgressCircular Indeterminate="true" />
+                </div>
+            }
+            else if (_pendingInvitations.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    No tienes invitaciones pendientes.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@_pendingInvitations" Hover="true" Class="mt-4">
+                    <HeaderContent>
+                        <MudTh>Proyecto</MudTh>
+                        <MudTh>Rol</MudTh>
+                        <MudTh>Invitado por</MudTh>
+                        <MudTh>Fecha</MudTh>
+                        <MudTh>Expira</MudTh>
+                        <MudTh>Acciones</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                        <MudTd DataLabel="Rol">
+                            <MudChip Color="@GetRoleColor(context.RoleName)">@context.RoleName</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Invitado por">@context.InvitedByName</MudTd>
+                        <MudTd DataLabel="Fecha">@context.InvitedAt.ToShortDateString()</MudTd>
+                        <MudTd DataLabel="Expira">@context.ExpiresAt.ToShortDateString()</MudTd>
+                        <MudTd DataLabel="Acciones">
+                            <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                                <MudButton Color="Color.Success" 
+                                          OnClick="@(() => AcceptInvitation(context))"
+                                          Disabled="@_processing">
+                                    Aceptar
+                                </MudButton>
+                                <MudButton Color="Color.Default" 
+                                          OnClick="@(() => RejectInvitation(context))"
+                                          Disabled="@_processing">
+                                    Rechazar
+                                </MudButton>
+                            </MudButtonGroup>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Aceptadas" Icon="@Icons.Material.Filled.CheckCircle">
+            @if (_loading)
+            {
+                <div class="d-flex justify-center pa-4">
+                    <MudProgressCircular Indeterminate="true" />
+                </div>
+            }
+            else if (_acceptedInvitations.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    No tienes invitaciones aceptadas.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@_acceptedInvitations" Hover="true" Class="mt-4">
+                    <HeaderContent>
+                        <MudTh>Proyecto</MudTh>
+                        <MudTh>Rol</MudTh>
+                        <MudTh>Invitado por</MudTh>
+                        <MudTh>Fecha aceptación</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                        <MudTd DataLabel="Rol">
+                            <MudChip Color="@GetRoleColor(context.RoleName)">@context.RoleName</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Invitado por">@context.InvitedByName</MudTd>
+                        <MudTd DataLabel="Fecha aceptación">@context.AcceptedAt?.ToShortDateString()</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+        
+        <MudTabPanel Text="Rechazadas" Icon="@Icons.Material.Filled.Cancel">
+            @if (_loading)
+            {
+                <div class="d-flex justify-center pa-4">
+                    <MudProgressCircular Indeterminate="true" />
+                </div>
+            }
+            else if (_rejectedInvitations.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">
+                    No tienes invitaciones rechazadas.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="@_rejectedInvitations" Hover="true" Class="mt-4">
+                    <HeaderContent>
+                        <MudTh>Proyecto</MudTh>
+                        <MudTh>Rol</MudTh>
+                        <MudTh>Invitado por</MudTh>
+                        <MudTh>Fecha rechazo</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Proyecto">@context.ProjectName</MudTd>
+                        <MudTd DataLabel="Rol">
+                            <MudChip Color="@GetRoleColor(context.RoleName)">@context.RoleName</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Invitado por">@context.InvitedByName</MudTd>
+                        <MudTd DataLabel="Fecha rechazo">@context.RejectedAt?.ToShortDateString()</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _activeTab = 0;
+    private bool _loading = false;
+    private bool _processing = false;
+
+    private List<ProjectInvitation> _allInvitations = new();
+    private List<ProjectInvitation> _pendingInvitations = new();
+    private List<ProjectInvitation> _acceptedInvitations = new();
+    private List<ProjectInvitation> _rejectedInvitations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInvitationsAsync();
+    }
+
+    private async Task LoadInvitationsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var email = AuthService.CurrentUser?.Email;
+            if (!string.IsNullOrEmpty(email))
+            {
+                _allInvitations = await InvitationService.GetMyInvitationsAsync(email);
+                
+                _pendingInvitations = _allInvitations.Where(i => i.Status == "Pending").ToList();
+                _acceptedInvitations = _allInvitations.Where(i => i.Status == "Accepted").ToList();
+                _rejectedInvitations = _allInvitations.Where(i => i.Status == "Rejected").ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar invitaciones: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task AcceptInvitation(ProjectInvitation invitation)
+    {
+        _processing = true;
+        try
+        {
+            var success = await InvitationService.AcceptInvitationAsync(invitation.Token);
+            
+            if (success)
+            {
+                await LoadInvitationsAsync();
+                Snackbar.Add($"Invitación al proyecto '{invitation.ProjectName}' aceptada correctamente", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Error al aceptar invitación", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al aceptar invitación: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private async Task RejectInvitation(ProjectInvitation invitation)
+    {
+        _processing = true;
+        try
+        {
+            var success = await InvitationService.RejectInvitationAsync(invitation.Token);
+            
+            if (success)
+            {
+                await LoadInvitationsAsync();
+                Snackbar.Add($"Invitación al proyecto '{invitation.ProjectName}' rechazada", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add("Error al rechazar invitación", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al rechazar invitación: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private Color GetRoleColor(string role) => role switch
+    {
+        "Owner" => Color.Primary,
+        "Admin" => Color.Secondary,
+        "Member" => Color.Info,
+        "Viewer" => Color.Default,
+        _ => Color.Default
+    };
+}

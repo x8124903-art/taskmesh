@@ -1,0 +1,176 @@
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isFormValid">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body1" Color="Color.Secondary">
+                    Invita a un miembro a unirse al proyecto.
+                </MudText>
+                
+                <MudTextField @bind-Value="model.Email"
+                              Label="Email del Usuario"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="El email es requerido"
+                              Validation="@(new EmailAddressAttribute() { ErrorMessage = "Email inválido" })"
+                              InputType="InputType.Email"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Email"
+                              HelperText="Introduce el email del usuario a invitar"
+                              Immediate="true" />
+                
+                <MudText Typo="Typo.body2" Style="font-weight: 500; margin-bottom: -8px;">Rol en el Proyecto</MudText>
+                <MudRadioGroup @bind-Value="model.RoleName">
+                    <MudStack Spacing="1">
+                        <MudPaper Outlined="true" Class="pa-2" Style="@(model.RoleName == "Owner" ? "border-color: var(--mud-palette-primary);" : "")">
+                            <MudRadio Value="@("Owner")" Color="Color.Primary" Dense="true">
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Error" Size="Size.Small" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Owner</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Control total del proyecto</MudText>
+                                    </div>
+                                </div>
+                            </MudRadio>
+                        </MudPaper>
+                        <MudPaper Outlined="true" Class="pa-2" Style="@(model.RoleName == "Admin" ? "border-color: var(--mud-palette-primary);" : "")">
+                            <MudRadio Value="@("Admin")" Color="Color.Primary" Dense="true">
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Warning" Size="Size.Small" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Admin</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Gestión completa excepto eliminación</MudText>
+                                    </div>
+                                </div>
+                            </MudRadio>
+                        </MudPaper>
+                        <MudPaper Outlined="true" Class="pa-2" Style="@(model.RoleName == "Member" ? "border-color: var(--mud-palette-primary);" : "")">
+                            <MudRadio Value="@("Member")" Color="Color.Primary" Dense="true">
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Default" Size="Size.Small" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Member</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Lectura y escritura de tareas</MudText>
+                                    </div>
+                                </div>
+                            </MudRadio>
+                        </MudPaper>
+                        <MudPaper Outlined="true" Class="pa-2" Style="@(model.RoleName == "Viewer" ? "border-color: var(--mud-palette-primary);" : "")">
+                            <MudRadio Value="@("Viewer")" Color="Color.Primary" Dense="true">
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Color="Color.Default" Size="Size.Small" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Viewer</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Solo lectura</MudText>
+                                    </div>
+                                </div>
+                            </MudRadio>
+                        </MudPaper>
+                    </MudStack>
+                </MudRadioGroup>
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@sending">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Send"
+                   OnClick="SendInvitation" 
+                   Disabled="@(!isFormValid || sending)">
+            @(sending ? "Enviando..." : "Enviar Invitación")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int ProjectId { get; set; }
+
+    private MudForm form = default!;
+    private bool isFormValid = false;
+    private bool sending = false;
+    private string errorMessage = string.Empty;
+    private InviteModel model = new();
+
+    private async Task SendInvitation()
+    {
+        sending = true;
+        errorMessage = string.Empty;
+        
+        try
+        {
+            await form.Validate();
+            
+            if (!isFormValid)
+            {
+                sending = false;
+                return;
+            }
+            
+            var request = new WebApp.Models.Projects.InviteMemberRequest
+            {
+                ProjectId = ProjectId,
+                Email = model.Email.Trim(),
+                Role = model.RoleName
+            };
+            
+            var invitation = await ProjectService.CreateInvitationAsync(request);
+            
+            if (invitation != null)
+            {
+                Snackbar.Add($"Invitación enviada correctamente a {model.Email}", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(invitation));
+            }
+            else
+            {
+                errorMessage = "No se pudo crear la invitación. Inténtalo de nuevo.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Message.Contains("409"))
+            {
+                errorMessage = "Este usuario ya tiene una invitación pendiente o es miembro del proyecto.";
+            }
+            else if (ex.Message.Contains("403"))
+            {
+                errorMessage = "No tienes permisos para invitar miembros a este proyecto.";
+            }
+            else if (ex.Message.Contains("400"))
+            {
+                errorMessage = "Los datos de la invitación son inválidos. Verifica el email y el rol.";
+            }
+            else
+            {
+                errorMessage = $"Error al enviar la invitación: {ex.Message}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            sending = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private class InviteModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string RoleName { get; set; } = "Member"; // Default role
+    }
+}

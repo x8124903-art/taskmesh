@@ -1,0 +1,5 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token",
+  "refreshToken": "refresh-token-test-123",
+  "expiresIn": 3600
+}

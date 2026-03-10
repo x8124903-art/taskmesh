@@ -1,0 +1,326 @@
+@page "/invitations/accept/{token}"
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    @if (loading)
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                <MudText Typo="Typo.h6">Cargando invitación...</MudText>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (invitation == null)
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Align="Align.Center">Invitación no encontrada</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    La invitación que estás buscando no existe o ha sido eliminada.
+                </MudText>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           Href="/projects"
+                           StartIcon="@Icons.Material.Filled.ArrowBack">
+                    Ir a Mis Proyectos
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (invitation.Status == "Expired" || invitation.ExpiresAt < DateTime.UtcNow)
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Color="Color.Warning" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Align="Align.Center">Invitación Expirada</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    Esta invitación ha expirado el @invitation.ExpiresAt.ToString("dd/MM/yyyy"). 
+                    Por favor, contacta con el propietario del proyecto para recibir una nueva invitación.
+                </MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Default" 
+                               Href="/projects"
+                               StartIcon="@Icons.Material.Filled.ArrowBack">
+                        Ir a Mis Proyectos
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (invitation.Status == "Accepted")
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Align="Align.Center">Ya Aceptaste Esta Invitación</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    Ya eres miembro del proyecto <strong>@invitation.ProjectName</strong>.
+                </MudText>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           Href="@($"/projects/{invitation.ProjectId}")"
+                           StartIcon="@Icons.Material.Filled.Folder">
+                    Ver Proyecto
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (invitation.Status == "Rejected")
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack AlignItems="AlignItems.Center" Spacing="4">
+                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Align="Align.Center">Invitación Rechazada</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    Ya rechazaste esta invitación anteriormente.
+                </MudText>
+                <MudButton Variant="Variant.Outlined" 
+                           Color="Color.Default" 
+                           Href="/projects"
+                           StartIcon="@Icons.Material.Filled.ArrowBack">
+                    Ir a Mis Proyectos
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    }
+    else if (invitation.Status == "Pending")
+    {
+        <MudPaper Class="pa-8" Elevation="3">
+            <MudStack Spacing="4">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Mail" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Typo="Typo.h4" Align="Align.Center">Invitación al Proyecto</MudText>
+                </MudStack>
+                
+                <MudDivider />
+                
+                <MudStack Spacing="3">
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                        <strong>@invitation.InvitedByName</strong> te ha invitado a unirte al proyecto.
+                    </MudAlert>
+                    
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Folder" Color="Color.Primary" />
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Proyecto</MudText>
+                                <MudText Typo="Typo.h6">@invitation.ProjectName</MudText>
+                            </div>
+                        </MudStack>
+                        
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="GetRoleColor(invitation.RoleName)" />
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Tu Rol</MudText>
+                                <MudChip Color="GetRoleColor(invitation.RoleName)" Size="Size.Medium">
+                                    @invitation.RoleName
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @GetRoleDescription(invitation.RoleName)
+                                </MudText>
+                            </div>
+                        </MudStack>
+                        
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Default" />
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
+                                <MudText Typo="Typo.body1">@invitation.Email</MudText>
+                            </div>
+                        </MudStack>
+                        
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Default" />
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Invitado el</MudText>
+                                <MudText Typo="Typo.body1">@invitation.InvitedAt.ToString("dd/MM/yyyy HH:mm")</MudText>
+                            </div>
+                        </MudStack>
+                        
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Color="Color.Warning" />
+                            <div>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Expira el</MudText>
+                                <MudText Typo="Typo.body1">@invitation.ExpiresAt.ToString("dd/MM/yyyy HH:mm")</MudText>
+                            </div>
+                        </MudStack>
+                    </MudStack>
+                </MudStack>
+                
+                <MudDivider />
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+                }
+                
+                <MudStack Row="true" Spacing="2" Justify="Justify.Center">
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Error" 
+                               StartIcon="@Icons.Material.Filled.Cancel"
+                               OnClick="RejectInvitation"
+                               Disabled="@processing"
+                               Size="Size.Large">
+                        Rechazar
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Success" 
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="AcceptInvitationAsync"
+                               Disabled="@processing"
+                               Size="Size.Large">
+                        @(processing ? "Procesando..." : "Aceptar Invitación")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public string Token { get; set; } = string.Empty;
+
+    private WebApp.Models.Projects.ProjectInvitation? invitation;
+    private bool loading = true;
+    private bool processing = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Token))
+        {
+            Navigation.NavigateTo("/projects");
+            return;
+        }
+        
+        await LoadInvitationAsync();
+    }
+
+    private async Task LoadInvitationAsync()
+    {
+        loading = true;
+        try
+        {
+            invitation = await ProjectService.GetInvitationByTokenAsync(Token);
+        }
+        catch
+        {
+            invitation = null;
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AcceptInvitationAsync()
+    {
+        if (invitation == null) return;
+        
+        processing = true;
+        errorMessage = string.Empty;
+        
+        try
+        {
+            var success = await ProjectService.AcceptInvitationAsync(Token);
+            
+            if (success)
+            {
+                Snackbar.Add($"¡Bienvenido al proyecto {invitation.ProjectName}!", Severity.Success);
+                
+                await Task.Delay(1500);
+                
+                Navigation.NavigateTo($"/projects/{invitation.ProjectId}");
+            }
+            else
+            {
+                errorMessage = "No se pudo aceptar la invitación. Inténtalo de nuevo.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Message.Contains("400"))
+            {
+                errorMessage = "El token de invitación es inválido o ha expirado.";
+            }
+            else if (ex.Message.Contains("404"))
+            {
+                errorMessage = "La invitación no existe.";
+            }
+            else if (ex.Message.Contains("409"))
+            {
+                errorMessage = "Ya eres miembro de este proyecto.";
+            }
+            else
+            {
+                errorMessage = $"Error al aceptar la invitación: {ex.Message}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            processing = false;
+        }
+    }
+
+    private async Task RejectInvitation()
+    {
+        if (invitation == null) return;
+        
+        processing = true;
+        errorMessage = string.Empty;
+        
+        try
+        {
+            var success = await ProjectService.RejectInvitationAsync(Token);
+            
+            if (success)
+            {
+                Snackbar.Add("Invitación rechazada", Severity.Info);
+                
+                await Task.Delay(1000);
+                
+                Navigation.NavigateTo("/projects");
+            }
+            else
+            {
+                errorMessage = "No se pudo rechazar la invitación. Inténtalo de nuevo.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al rechazar la invitación: {ex.Message}";
+        }
+        finally
+        {
+            processing = false;
+        }
+    }
+
+    private Color GetRoleColor(string role) => role switch
+    {
+        "Owner" => Color.Error,
+        "Admin" => Color.Warning,
+        "Member" => Color.Primary,
+        "Viewer" => Color.Default,
+        _ => Color.Info
+    };
+
+    private string GetRoleDescription(string role) => role switch
+    {
+        "Owner" => "Control total del proyecto incluyendo eliminación",
+        "Admin" => "Gestión completa excepto eliminación del proyecto",
+        "Member" => "Lectura y escritura de tareas",
+        "Viewer" => "Solo lectura",
+        _ => "Rol desconocido"
+    };
+}

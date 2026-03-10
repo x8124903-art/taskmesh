@@ -1,0 +1,9 @@
+{
+  "idProject": 1,
+  "name": "Test Project",
+  "description": "A test project for integration tests",
+  "status": 1,
+  "createdBy": 1,
+  "createdAt": "2026-03-09T10:00:00",
+  "updatedAt": "2026-03-09T10:00:00"
+}
