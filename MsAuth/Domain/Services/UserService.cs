@@ -5,9 +5,9 @@ namespace MsAuth.Domain.Services
     public sealed class UserService : IUserService
     {
         private readonly MsAuth.Infrastructure.Repositories.IUserRepository _repository;
-        private readonly PasswordHasher _hasher;
+        private readonly IPasswordHasher _hasher;
 
-        public UserService(MsAuth.Infrastructure.Repositories.IUserRepository repository, PasswordHasher hasher)
+        public UserService(MsAuth.Infrastructure.Repositories.IUserRepository repository, IPasswordHasher hasher)
         {
             _repository = repository;
             _hasher = hasher;
@@ -32,7 +32,7 @@ namespace MsAuth.Domain.Services
             }
             
             var hash = _hasher.HashPassword(request.Password);
-            var user = await _repository.AddAsync(new RegisterRequest(request.Email, request.Name, hash), cancellationToken);
+            var user = await _repository.AddAsync(request.Email, request.Name, hash, cancellationToken);
             return user;
         }
 

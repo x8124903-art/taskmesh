@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MsProjects.Application.Models;
 using MsProjects.Domain.Services;
+using MsProjects.Infrastructure.Persistence;
 
 namespace MsProjects.Infrastructure.Repositories
 {
@@ -17,21 +18,23 @@ namespace MsProjects.Infrastructure.Repositories
         public async Task<IEnumerable<ProjectModel>> GetAllAsync(CancellationToken cancellationToken = default)
         {
             using var connection = _context.CreateConnection();
-            return await _context.QueryAsync<ProjectModel>(
+            var entities = await _context.QueryAsync<ProjectEntity>(
                 connection,
                 QueriesMySql.GetAll,
                 null,
                 cancellationToken);
+            return entities.Select(ToModel);
         }
 
         public async Task<ProjectModel?> GetAsync(int id, CancellationToken cancellationToken = default)
         {
             using var connection = _context.CreateConnection();
-            return await _context.QueryFirstOrDefaultAsync<ProjectModel>(
+            var entity = await _context.QueryFirstOrDefaultAsync<ProjectEntity>(
                 connection,
                 QueriesMySql.GetById,
                 new { IdProject = id },
                 cancellationToken);
+            return entity is null ? null : ToModel(entity);
         }
 
         public async Task<ProjectModel> AddAsync(AddProjectRequest request, int ownerId, CancellationToken cancellationToken = default)
@@ -66,5 +69,8 @@ namespace MsProjects.Infrastructure.Repositories
                 new { IdProject = id },
                 cancellationToken);
         }
+
+        private static ProjectModel ToModel(ProjectEntity e) =>
+            new(e.IdProject, e.Name, e.Description, e.Status, e.StatusName, e.CreatedBy, e.CreatedByName, e.IsDeleted, e.CreatedAt);
     }
 }

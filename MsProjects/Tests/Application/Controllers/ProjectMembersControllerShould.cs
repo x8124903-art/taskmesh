@@ -9,23 +9,22 @@ using Microsoft.Extensions.Primitives;
 using Moq;
 using MsProjects.Application.Controllers;
 using MsProjects.Application.Models;
-using MsProjects.Domain.Services;
-using MsProjects.Domain.Services.Authorization;
+using MsProjects.Application.UseCases.ProjectMember;
 using Xunit;
 
 namespace MsProjects.Tests.Application.Controllers;
 
 public sealed class ProjectMembersControllerShould
 {
-    private readonly Mock<IProjectMemberService> _serviceMock;
-    private readonly Mock<IProjectAuthorizationService> _authServiceMock;
+    private readonly Mock<IGetProjectMembersUseCase> _getMembersMock = new();
+    private readonly Mock<IChangeProjectMemberRoleUseCase> _changeRoleMock = new();
+    private readonly Mock<IRemoveProjectMemberUseCase> _removeMemberMock = new();
     private readonly ProjectMembersController _controller;
 
     public ProjectMembersControllerShould()
     {
-        _serviceMock = new Mock<IProjectMemberService>();
-        _authServiceMock = new Mock<IProjectAuthorizationService>();
-        _controller = new ProjectMembersController(_serviceMock.Object, _authServiceMock.Object);
+        _controller = new ProjectMembersController(
+            _getMembersMock.Object, _changeRoleMock.Object, _removeMemberMock.Object);
         
         _controller.ControllerContext = new ControllerContext
         {
@@ -39,7 +38,7 @@ public sealed class ProjectMembersControllerShould
     }
 
     [Fact]
-    public async Task GetMembers_ReturnsOk_WhenUserIsMember()
+    public async Task GetMembers_ReturnsOk_WhenUseCaseSucceeds()
     {
         const int USER_ID = 1;
         const int PROJECT_ID = 100;
@@ -51,75 +50,17 @@ public sealed class ProjectMembersControllerShould
             new(2, PROJECT_ID, 2, "Test2", "Test2@test.com", 3, "Member", DateTime.UtcNow, DateTime.UtcNow)
         };
 
-        _authServiceMock.Setup(x => x.IsProjectMemberAsync(USER_ID, PROJECT_ID, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        _serviceMock.Setup(x => x.GetMembersAsync(PROJECT_ID, It.IsAny<CancellationToken>()))
+        _getMembersMock.Setup(x => x.ExecuteAsync(PROJECT_ID, USER_ID, It.IsAny<CancellationToken>()))
             .ReturnsAsync(members);
 
         var result = await _controller.GetMembers(PROJECT_ID, CancellationToken.None);
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        var returnedMembers = okResult.Value.Should().BeAssignableTo<IEnumerable<ProjectMemberModel>>().Subject;
-        returnedMembers.Should().HaveCount(2);
+        okResult.Value.Should().Be(members);
     }
 
     [Fact]
-    public async Task GetMembers_ReturnsForbidden_WhenUserIsNotMember()
-    {
-        const int USER_ID = 1;
-        const int PROJECT_ID = 100;
-        SetUserIdHeader(USER_ID);
-
-        _authServiceMock.Setup(x => x.IsProjectMemberAsync(USER_ID, PROJECT_ID, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        var result = await _controller.GetMembers(PROJECT_ID, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        _serviceMock.Verify(x => x.GetMembersAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task ChangeRole_ReturnsForbidden_WhenUserLacksOwnerOrAdminRole()
-    {
-        const int USER_ID = 1;
-        const int PROJECT_ID = 100;
-        const int TARGET_USER_ID = 5;
-        SetUserIdHeader(USER_ID);
-
-        var request = new ChangeRoleRequest("Admin");
-
-        _authServiceMock.Setup(x => x.HasProjectRoleAsync(
-            USER_ID, PROJECT_ID, It.IsAny<CancellationToken>(), "Owner", "Admin"))
-            .ReturnsAsync(false);
-
-        var result = await _controller.ChangeRole(PROJECT_ID, TARGET_USER_ID, request, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        _serviceMock.Verify(x => x.ChangeRoleAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task RemoveMember_ReturnsForbidden_WhenUserLacksOwnerOrAdminRole()
-    {
-        const int USER_ID = 1;
-        const int PROJECT_ID = 100;
-        const int TARGET_USER_ID = 5;
-        SetUserIdHeader(USER_ID);
-
-        _authServiceMock.Setup(x => x.HasProjectRoleAsync(
-            USER_ID, PROJECT_ID, It.IsAny<CancellationToken>(), "Owner", "Admin"))
-            .ReturnsAsync(false);
-
-        var result = await _controller.RemoveMember(PROJECT_ID, TARGET_USER_ID, CancellationToken.None);
-
-        result.Should().BeOfType<ForbidResult>();
-        _serviceMock.Verify(x => x.RemoveMemberAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task ChangeRole_ReturnsNoContent_WhenUserIsAdminOrOwner()
+    public async Task ChangeRole_ReturnsNoContent_WhenSuccessful()
     {
         const int USER_ID = 1;
         const int PROJECT_ID = 100;
@@ -127,39 +68,28 @@ public sealed class ProjectMembersControllerShould
         SetUserIdHeader(USER_ID);
 
         var request = new ChangeRoleRequest("Member");
-
-        _authServiceMock.Setup(x => x.HasProjectRoleAsync(
-            USER_ID, PROJECT_ID, It.IsAny<CancellationToken>(), "Owner", "Admin"))
-            .ReturnsAsync(true);
-
-        _serviceMock.Setup(x => x.ChangeRoleAsync(PROJECT_ID, TARGET_USER_ID, "Member", It.IsAny<CancellationToken>()))
+        _changeRoleMock.Setup(x => x.ExecuteAsync(PROJECT_ID, TARGET_USER_ID, "Member", USER_ID, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await _controller.ChangeRole(PROJECT_ID, TARGET_USER_ID, request, CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        _serviceMock.Verify(x => x.ChangeRoleAsync(PROJECT_ID, TARGET_USER_ID, "Member", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task RemoveMember_ReturnsNoContent_WhenUserIsAdminOrOwner()
+    public async Task RemoveMember_ReturnsNoContent_WhenSuccessful()
     {
         const int USER_ID = 1;
         const int PROJECT_ID = 100;
         const int TARGET_USER_ID = 5;
         SetUserIdHeader(USER_ID);
 
-        _authServiceMock.Setup(x => x.HasProjectRoleAsync(
-            USER_ID, PROJECT_ID, It.IsAny<CancellationToken>(), "Owner", "Admin"))
-            .ReturnsAsync(true);
-
-        _serviceMock.Setup(x => x.RemoveMemberAsync(PROJECT_ID, TARGET_USER_ID, It.IsAny<CancellationToken>()))
+        _removeMemberMock.Setup(x => x.ExecuteAsync(PROJECT_ID, TARGET_USER_ID, USER_ID, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var result = await _controller.RemoveMember(PROJECT_ID, TARGET_USER_ID, CancellationToken.None);
 
         result.Should().BeOfType<NoContentResult>();
-        _serviceMock.Verify(x => x.RemoveMemberAsync(PROJECT_ID, TARGET_USER_ID, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

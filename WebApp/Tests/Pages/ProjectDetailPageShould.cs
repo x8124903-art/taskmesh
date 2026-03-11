@@ -122,7 +122,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Owner Project"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 2) tabs[1].Click();
+        if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Owner Project");
         cut.Markup.Should().Contain("Miembros del Proyecto");
@@ -207,7 +207,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Edit Me"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 3) tabs[2].Click();
+        if (tabs.Count >= 5) tabs[4].Click();
 
         var forms = cut.FindAll("form");
         if (forms.Any()) forms.Last().Submit();
@@ -292,7 +292,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Fail Save"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 3) tabs[2].Click();
+        if (tabs.Count >= 5) tabs[4].Click();
 
         var forms = cut.FindAll("form");
         if (forms.Any()) forms.Last().Submit();
@@ -359,7 +359,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Exception Save"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 3) tabs[2].Click();
+        if (tabs.Count >= 5) tabs[4].Click();
 
         var forms = cut.FindAll("form");
         if (forms.Any()) forms.Last().Submit();
@@ -414,7 +414,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Member Error"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 2) tabs[1].Click();
+        if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Member Error");
     }
@@ -439,7 +439,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Actions Project"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 2) tabs[1].Click();
+        if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Admin User");
         cut.Markup.Should().Contain("Regular");
@@ -502,7 +502,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Self Role"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 2) tabs[1].Click();
+        if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Other");
     }
@@ -525,7 +525,7 @@ public sealed class ProjectDetailPageShould : TestContext
         cut.WaitForState(() => cut.Markup.Contains("Invite Test"), TimeSpan.FromSeconds(3));
 
         var tabs = cut.FindAll("div.mud-tab");
-        if (tabs.Count >= 2) tabs[1].Click();
+        if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Invitar Miembro");
     }

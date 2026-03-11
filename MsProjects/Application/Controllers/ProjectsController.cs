@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MsProjects.Application.Models;
-using MsProjects.Domain.Services.Authorization;
+using MsProjects.Application.UseCases.Project;
 
 namespace MsProjects.Application.Controllers
 {
@@ -8,18 +8,24 @@ namespace MsProjects.Application.Controllers
     [Route("projects")]
     public sealed class ProjectsController : ControllerBase
     {
-        private readonly MsProjects.Domain.Services.IProjectService _service;
-        private readonly IProjectAuthorizationService _authService;
-        private readonly ILogger<ProjectsController> _logger;
+        private readonly IGetUserProjectsUseCase _getUserProjects;
+        private readonly IGetProjectDetailsUseCase _getProjectDetails;
+        private readonly ICreateProjectUseCase _createProject;
+        private readonly IUpdateProjectUseCase _updateProject;
+        private readonly IDeleteProjectUseCase _deleteProject;
 
         public ProjectsController(
-            MsProjects.Domain.Services.IProjectService service,
-            IProjectAuthorizationService authService,
-            ILogger<ProjectsController> logger)
+            IGetUserProjectsUseCase getUserProjects,
+            IGetProjectDetailsUseCase getProjectDetails,
+            ICreateProjectUseCase createProject,
+            IUpdateProjectUseCase updateProject,
+            IDeleteProjectUseCase deleteProject)
         {
-            _service = service;
-            _authService = authService;
-            _logger = logger;
+            _getUserProjects = getUserProjects;
+            _getProjectDetails = getProjectDetails;
+            _createProject = createProject;
+            _updateProject = updateProject;
+            _deleteProject = deleteProject;
         }
 
         private int GetCurrentUserId()
@@ -30,10 +36,7 @@ namespace MsProjects.Application.Controllers
                 throw new UnauthorizedAccessException("User authentication required. X-User-Id header not found.");
             
             if (!int.TryParse(userIdHeader, out var userId))
-            {
-                _logger.LogError("Failed to parse X-User-Id header. Value: '{Value}'", userIdHeader);
                 throw new ArgumentException($"Invalid X-User-Id header value: '{userIdHeader}' (cannot parse as integer)");
-            }
             
             return userId;
         }
@@ -42,32 +45,17 @@ namespace MsProjects.Application.Controllers
         public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
         {
             var currentUserId = GetCurrentUserId();
-            
-            var userProjectIds = await _authService.GetUserProjectIdsAsync(currentUserId, cancellationToken);
-            
-            var allProjects = await _service.GetAllAsync(cancellationToken);
-            
-            var accessibleProjects = allProjects.Where(p => userProjectIds.Contains(p.IdProject)).ToList();
-            
-            return Ok(accessibleProjects);
+            var projects = await _getUserProjects.ExecuteAsync(currentUserId, cancellationToken);
+            return Ok(projects);
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAsync([FromRoute] int id, CancellationToken cancellationToken)
         {
             var currentUserId = GetCurrentUserId();
-            
-            var project = await _service.GetAsync(id, cancellationToken);
+            var project = await _getProjectDetails.ExecuteAsync(id, currentUserId, cancellationToken);
             if (project == null)
-            {
                 return NotFound();
-            }
-            
-            if (!await _authService.IsProjectMemberAsync(currentUserId, id, cancellationToken))
-            {
-                return StatusCode(403);
-            }
-            
             return Ok(project);
         }
 
@@ -75,14 +63,12 @@ namespace MsProjects.Application.Controllers
         public async Task<IActionResult> Add([FromBody] AddProjectRequest request, CancellationToken cancellationToken)
         {
             if (!ModelState.IsValid)
-            {
                 return BadRequest(ModelState);
-            }
             
             var currentUserId = GetCurrentUserId();
             var userName = Request.Headers["X-User-Name"].FirstOrDefault();
             var userEmail = Request.Headers["X-User-Email"].FirstOrDefault();
-            var project = await _service.AddAsync(request, currentUserId, cancellationToken, userName, userEmail);
+            var project = await _createProject.ExecuteAsync(request, currentUserId, userName, userEmail, cancellationToken);
             
             var locationUri = $"/api/v1.0/projects/{project.IdProject}";
             return Created(locationUri, project);
@@ -92,21 +78,7 @@ namespace MsProjects.Application.Controllers
         public async Task<IActionResult> Update([FromRoute] int id, [FromBody] UpdateProjectRequest request, CancellationToken cancellationToken)
         {
             var currentUserId = GetCurrentUserId();
-            
-            var project = await _service.GetAsync(id, cancellationToken);
-            if (project == null)
-            {
-                return NotFound();
-            }
-            
-            if (!await _authService.HasProjectRoleAsync(currentUserId, id, cancellationToken, 
-                MsProjects.Domain.Services.ProjectRoles.Owner, 
-                MsProjects.Domain.Services.ProjectRoles.Admin))
-            {
-                return StatusCode(403);
-            }
-            
-            await _service.UpdateAsync(id, request, cancellationToken);
+            await _updateProject.ExecuteAsync(id, request, currentUserId, cancellationToken);
             return NoContent();
         }
 
@@ -114,19 +86,7 @@ namespace MsProjects.Application.Controllers
         public async Task<IActionResult> Delete([FromRoute] int id, CancellationToken cancellationToken)
         {
             var currentUserId = GetCurrentUserId();
-            
-            var project = await _service.GetAsync(id, cancellationToken);
-            if (project == null)
-            {
-                return NotFound();
-            }
-            
-            if (!await _authService.IsProjectOwnerAsync(currentUserId, id, cancellationToken))
-            {
-                return StatusCode(403);
-            }
-            
-            await _service.DeleteAsync(id, cancellationToken);
+            await _deleteProject.ExecuteAsync(id, currentUserId, cancellationToken);
             return NoContent();
         }
     }

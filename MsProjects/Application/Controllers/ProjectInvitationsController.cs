@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MsProjects.Application.Models;
-using MsProjects.Domain.Services;
-using MsProjects.Domain.Services.Authorization;
+using MsProjects.Application.UseCases.ProjectInvitation;
 
 namespace MsProjects.Application.Controllers;
 
@@ -9,18 +8,33 @@ namespace MsProjects.Application.Controllers;
 [Route("invitations")]
 public sealed class ProjectInvitationsController : ControllerBase
 {
-    private readonly IProjectInvitationService _invitationService;
-    private readonly IProjectAuthorizationService _authService;
-    private readonly ILogger<ProjectInvitationsController> _logger;
+    private readonly ICreateProjectInvitationUseCase _createInvitation;
+    private readonly IGetInvitationDetailsUseCase _getInvitationDetails;
+    private readonly IGetInvitationByTokenUseCase _getInvitationByToken;
+    private readonly IGetProjectPendingInvitationsUseCase _getPendingInvitations;
+    private readonly IGetMyInvitationsUseCase _getMyInvitations;
+    private readonly IAcceptProjectInvitationUseCase _acceptInvitation;
+    private readonly IRejectProjectInvitationUseCase _rejectInvitation;
+    private readonly ICancelProjectInvitationUseCase _cancelInvitation;
 
     public ProjectInvitationsController(
-        IProjectInvitationService invitationService,
-        IProjectAuthorizationService authService,
-        ILogger<ProjectInvitationsController> logger)
+        ICreateProjectInvitationUseCase createInvitation,
+        IGetInvitationDetailsUseCase getInvitationDetails,
+        IGetInvitationByTokenUseCase getInvitationByToken,
+        IGetProjectPendingInvitationsUseCase getPendingInvitations,
+        IGetMyInvitationsUseCase getMyInvitations,
+        IAcceptProjectInvitationUseCase acceptInvitation,
+        IRejectProjectInvitationUseCase rejectInvitation,
+        ICancelProjectInvitationUseCase cancelInvitation)
     {
-        _invitationService = invitationService;
-        _authService = authService;
-        _logger = logger;
+        _createInvitation = createInvitation;
+        _getInvitationDetails = getInvitationDetails;
+        _getInvitationByToken = getInvitationByToken;
+        _getPendingInvitations = getPendingInvitations;
+        _getMyInvitations = getMyInvitations;
+        _acceptInvitation = acceptInvitation;
+        _rejectInvitation = rejectInvitation;
+        _cancelInvitation = cancelInvitation;
     }
 
     private int GetCurrentUserId()
@@ -36,31 +50,15 @@ public sealed class ProjectInvitationsController : ControllerBase
         return userId;
     }
 
-    /// <summary>
-    /// Creates a new invitation to join a project (Owner/Admin only)
-    /// </summary>
     [HttpPost]
     public async Task<IActionResult> CreateInvitation(
         [FromBody] InviteMemberRequest request,
         CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        if (!await _authService.HasProjectRoleAsync(
-            currentUserId, 
-            request.ProjectId, 
-            cancellationToken, 
-            ProjectRoles.Owner, 
-            ProjectRoles.Admin))
-        {
-            return StatusCode(403);
-        }
+        var userName = Request.Headers["X-User-Name"].FirstOrDefault();
 
-        var invitation = await _invitationService.CreateInvitationAsync(
-            request, 
-            currentUserId, 
-            cancellationToken,
-            Request.Headers["X-User-Name"].FirstOrDefault());
+        var invitation = await _createInvitation.ExecuteAsync(request, currentUserId, userName, cancellationToken);
         
         return CreatedAtAction(
             nameof(GetInvitationById), 
@@ -68,85 +66,35 @@ public sealed class ProjectInvitationsController : ControllerBase
             invitation);
     }
 
-    /// <summary>
-    /// Gets an invitation by ID (Owner/Admin only)
-    /// </summary>
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetInvitationById(
         int id,
         CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        var invitation = await _invitationService.GetInvitationByIdAsync(id, cancellationToken);
-        
-        if (invitation == null)
-        {
-            return NotFound();
-        }
-
-        if (!await _authService.HasProjectRoleAsync(
-            currentUserId, 
-            invitation.ProjectId, 
-            cancellationToken, 
-            ProjectRoles.Owner, 
-            ProjectRoles.Admin))
-        {
-            return StatusCode(403);
-        }
-
+        var invitation = await _getInvitationDetails.ExecuteAsync(id, currentUserId, cancellationToken);
         return Ok(invitation);
     }
 
-    /// <summary>
-    /// Gets an invitation by token (public, for accepting/rejecting)
-    /// </summary>
     [HttpGet("by-token/{token}")]
     public async Task<IActionResult> GetInvitationByToken(
         string token,
         CancellationToken cancellationToken)
     {
-        var invitation = await _invitationService.GetInvitationByTokenAsync(token, cancellationToken);
-        
-        if (invitation == null)
-        {
-            return NotFound();
-        }
-
+        var invitation = await _getInvitationByToken.ExecuteAsync(token, cancellationToken);
         return Ok(invitation);
     }
 
-    /// <summary>
-    /// Gets all pending invitations for a project (Owner/Admin only)
-    /// </summary>
     [HttpGet("project/{projectId:int}")]
     public async Task<IActionResult> GetPendingInvitations(
         int projectId,
         CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        if (!await _authService.HasProjectRoleAsync(
-            currentUserId, 
-            projectId, 
-            cancellationToken, 
-            ProjectRoles.Owner, 
-            ProjectRoles.Admin))
-        {
-            return StatusCode(403);
-        }
-
-        var invitations = await _invitationService.GetPendingInvitationsAsync(
-            projectId, 
-            cancellationToken);
-        
+        var invitations = await _getPendingInvitations.ExecuteAsync(projectId, currentUserId, cancellationToken);
         return Ok(invitations);
     }
 
-    /// <summary>
-    /// Gets all invitations for the current user's email
-    /// Optional status filtering: Pending, Accepted, Rejected
-    /// </summary>
     [HttpGet("my-invitations")]
     public async Task<IActionResult> GetMyInvitations(
         [FromQuery] string email,
@@ -154,26 +102,12 @@ public sealed class ProjectInvitationsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(email))
-        {
             return BadRequest("Email is required");
-        }
 
-        var invitations = await _invitationService.GetInvitationsByEmailAsync(
-            email, 
-            cancellationToken);
-        
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            invitations = invitations.Where(i => 
-                string.Equals(i.Status, status, StringComparison.OrdinalIgnoreCase));
-        }
-        
+        var invitations = await _getMyInvitations.ExecuteAsync(email, status, cancellationToken);
         return Ok(invitations);
     }
 
-    /// <summary>
-    /// Accepts an invitation
-    /// </summary>
     [HttpPost("accept")]
     public async Task<IActionResult> AcceptInvitation(
         [FromBody] AcceptInvitationRequest request,
@@ -183,58 +117,26 @@ public sealed class ProjectInvitationsController : ControllerBase
         var userName = Request.Headers["X-User-Name"].FirstOrDefault();
         var userEmail = Request.Headers["X-User-Email"].FirstOrDefault();
         
-        await _invitationService.AcceptInvitationAsync(
-            request.Token, 
-            currentUserId, 
-            cancellationToken,
-            userName,
-            userEmail);
-        
+        await _acceptInvitation.ExecuteAsync(request.Token, currentUserId, userName, userEmail, cancellationToken);
         return Ok(new { Message = "Invitation accepted successfully" });
     }
 
-    /// <summary>
-    /// Rejects an invitation
-    /// </summary>
     [HttpPost("reject")]
     public async Task<IActionResult> RejectInvitation(
         [FromBody] RejectInvitationRequest request,
         CancellationToken cancellationToken)
     {
-        await _invitationService.RejectInvitationAsync(request.Token, cancellationToken);
-        
+        await _rejectInvitation.ExecuteAsync(request.Token, cancellationToken);
         return Ok(new { Message = "Invitation rejected successfully" });
     }
 
-    /// <summary>
-    /// Deletes/cancels an invitation (only by project owner/admin)
-    /// </summary>
     [HttpDelete("{token}")]
     public async Task<IActionResult> DeleteInvitation(
         string token,
         CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        var invitation = await _invitationService.GetInvitationByTokenAsync(token, cancellationToken);
-        
-        if (invitation == null)
-        {
-            return NotFound(new { Message = "Invitation not found" });
-        }
-
-        if (!await _authService.HasProjectRoleAsync(
-            currentUserId, 
-            invitation.ProjectId, 
-            cancellationToken,
-            ProjectRoles.Owner, 
-            ProjectRoles.Admin))
-        {
-            return StatusCode(403);
-        }
-
-        await _invitationService.DeleteInvitationAsync(token, cancellationToken);
-        
+        await _cancelInvitation.ExecuteAsync(token, currentUserId, cancellationToken);
         return NoContent();
     }
 }

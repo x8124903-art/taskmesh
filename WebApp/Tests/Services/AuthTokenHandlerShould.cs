@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using WebApp.Services;
@@ -8,11 +9,16 @@ namespace WebApp.Tests.Services;
 public sealed class AuthTokenHandlerShould
 {
     private readonly Mock<IJSRuntime> _jsRuntime = new();
+    private readonly Mock<IAuthService> _authService = new();
     private readonly Mock<ILogger<AuthTokenHandler>> _logger = new();
 
     private (AuthTokenHandler handler, HttpClient client) CreateHandler()
     {
-        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, _logger.Object)
+        var services = new ServiceCollection();
+        services.AddSingleton(_authService.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, serviceProvider, _logger.Object)
         {
             InnerHandler = new TestInnerHandler()
         };

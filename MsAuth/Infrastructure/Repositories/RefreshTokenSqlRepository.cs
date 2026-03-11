@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MsAuth.Application.Models;
 using MsAuth.Infrastructure.Data;
+using MsAuth.Infrastructure.Persistence;
 
 namespace MsAuth.Infrastructure.Repositories;
 
@@ -13,11 +14,12 @@ public sealed class RefreshTokenSqlRepository : IRefreshTokenRepository
     public async Task<RefreshTokenModel?> GetByTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         using var connection = _context.CreateConnection();
-        return await _context.QueryFirstOrDefaultAsync<RefreshTokenModel>(
+        var entity = await _context.QueryFirstOrDefaultAsync<RefreshTokenEntity>(
             connection,
             QueriesMySql.GetRefreshToken,
             new { Token = token },
             cancellationToken);
+        return entity is null ? null : ToModel(entity);
     }
 
     public async Task<int> AddAsync(RefreshTokenModel model, CancellationToken cancellationToken = default)
@@ -39,4 +41,7 @@ public sealed class RefreshTokenSqlRepository : IRefreshTokenRepository
             new { Token = token, RevokedAt = DateTime.UtcNow },
             cancellationToken);
     }
+
+    private static RefreshTokenModel ToModel(RefreshTokenEntity e) =>
+        new(e.IdRefreshToken, e.Token, e.UserId, e.ExpiresAt, e.IsRevoked, e.CreatedAt, e.RevokedAt);
 }

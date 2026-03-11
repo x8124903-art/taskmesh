@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MsProjects.Application.Models;
 using MsProjects.Domain.Services;
+using MsProjects.Infrastructure.Persistence;
 
 namespace MsProjects.Infrastructure.Repositories;
 
@@ -17,23 +18,24 @@ public sealed class ProjectMemberSqlRepository : IProjectMemberRepository
     public async Task<IEnumerable<ProjectMemberModel>> GetMembersAsync(int projectId, CancellationToken cancellationToken = default)
     {
         using var connection = _context.CreateConnection();
-        return await _context.QueryAsync<ProjectMemberModel>(
+        var entities = await _context.QueryAsync<ProjectMemberEntity>(
             connection,
             QueriesMySql.GetMembersByProjectId,
             new { ProjectId = projectId },
             cancellationToken);
+        return entities.Select(ToModel);
     }
 
     public async Task ChangeRoleAsync(int projectId, int userId, string role, CancellationToken cancellationToken = default)
     {
         using var connection = _context.CreateConnection();
-        var member = await _context.QueryFirstOrDefaultAsync<ProjectMemberModel>(
+        var entity = await _context.QueryFirstOrDefaultAsync<ProjectMemberEntity>(
             connection,
             QueriesMySql.GetMemberByProjectIdAndUserId,
             new { ProjectId = projectId, UserId = userId },
             cancellationToken);
         
-        if (member == null)
+        if (entity == null)
             throw new InvalidOperationException($"Member not found in project {projectId}");
 
         var roleId = ProjectRoles.GetIdFromName(role);
@@ -41,26 +43,26 @@ public sealed class ProjectMemberSqlRepository : IProjectMemberRepository
         await _context.ExecuteAsync(
             connection,
             QueriesMySql.UpdateMemberRole,
-            new { IdProjectMember = member.IdProjectMember, Role = roleId },
+            new { IdProjectMember = entity.IdProjectMember, Role = roleId },
             cancellationToken);
     }
 
     public async Task RemoveMemberAsync(int projectId, int userId, CancellationToken cancellationToken = default)
     {
         using var connection = _context.CreateConnection();
-        var member = await _context.QueryFirstOrDefaultAsync<ProjectMemberModel>(
+        var entity = await _context.QueryFirstOrDefaultAsync<ProjectMemberEntity>(
             connection,
             QueriesMySql.GetMemberByProjectIdAndUserId,
             new { ProjectId = projectId, UserId = userId },
             cancellationToken);
         
-        if (member == null)
+        if (entity == null)
             throw new InvalidOperationException($"Member not found in project {projectId}");
 
         await _context.ExecuteAsync(
             connection,
             QueriesMySql.DeleteMember,
-            new { IdProjectMember = member.IdProjectMember },
+            new { IdProjectMember = entity.IdProjectMember },
             cancellationToken);
     }
 
@@ -130,4 +132,7 @@ public sealed class ProjectMemberSqlRepository : IProjectMemberRepository
             },
             cancellationToken);
     }
+
+    private static ProjectMemberModel ToModel(ProjectMemberEntity e) =>
+        new(e.IdProjectMember, e.ProjectId, e.UserId, e.UserName, e.Email, e.Role, e.RoleName, e.InvitedAt, e.JoinedAt);
 }

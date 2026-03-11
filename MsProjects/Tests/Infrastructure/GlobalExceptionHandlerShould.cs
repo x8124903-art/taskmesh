@@ -19,7 +19,7 @@ public sealed class GlobalExceptionHandlerShould
     }
 
     [Fact]
-    public async Task TryHandleAsync_WithUnauthorizedAccessException_Returns401()
+    public async Task TryHandleAsync_WithUnauthorizedAccessException_Returns403()
     {
         var (handler, context) = CreateHandler();
         var exception = new UnauthorizedAccessException("Not allowed");
@@ -27,7 +27,7 @@ public sealed class GlobalExceptionHandlerShould
         var result = await handler.TryHandleAsync(context, exception, CancellationToken.None);
 
         result.Should().BeTrue();
-        context.Response.StatusCode.Should().Be(401);
+        context.Response.StatusCode.Should().Be(403);
     }
 
     [Fact]

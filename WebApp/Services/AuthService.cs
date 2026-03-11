@@ -6,7 +6,7 @@ using WebApp.Models.Auth;
 
 namespace WebApp.Services;
 
-public class AuthService
+public class AuthService : IAuthService
 {
     private readonly HttpClient _httpClient;
     private readonly IJSRuntime _jsRuntime;
@@ -19,7 +19,7 @@ public class AuthService
         _logger = logger;
     }
 
-    public User? CurrentUser { get; private set; }
+    public User? CurrentUser { get; set; }
     public bool IsAuthenticated => CurrentUser != null;
 
     public async Task<bool> InitializeAsync()
@@ -131,5 +131,33 @@ public class AuthService
         CurrentUser = null;
         await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "accessToken");
         await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
+    }
+
+    public async Task<bool> RefreshTokenAsync()
+    {
+        try
+        {
+            var refreshToken = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "refreshToken");
+            if (string.IsNullOrEmpty(refreshToken))
+                return false;
+
+            var response = await _httpClient.PostAsJsonAsync("/api/v1/auth/refresh", new { RefreshToken = refreshToken });
+            if (!response.IsSuccessStatusCode)
+                return false;
+
+            var data = await response.Content.ReadFromJsonAsync<LoginResponse>();
+            if (data == null)
+                return false;
+
+            CurrentUser = data.User;
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "accessToken", data.AccessToken);
+            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", "refreshToken", data.RefreshToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refreshing token");
+            return false;
+        }
     }
 }

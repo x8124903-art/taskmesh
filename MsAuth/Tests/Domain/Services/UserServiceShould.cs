@@ -81,11 +81,11 @@ public sealed class UserServiceShould
         var request = new RegisterRequest("newuser@demo.com", "John Doe", "Password123!");
         var expectedUser = new UserModel(1, "newuser@demo.com", "John", "hashed", false, DateTime.UtcNow);
         
-        repoMock.Setup(x => x.AddAsync(It.Is<RegisterRequest>(r => 
-            r.Email == request.Email && 
-            r.Name == request.Name && 
-            r.Password != "Password123!"
-        ), It.IsAny<CancellationToken>()))
+        repoMock.Setup(x => x.AddAsync(
+            It.Is<string>(e => e == request.Email),
+            It.Is<string>(n => n == request.Name),
+            It.Is<string>(h => h != "Password123!"),
+            It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedUser);
         
         var service = new UserService(repoMock.Object, hasher);
@@ -94,7 +94,7 @@ public sealed class UserServiceShould
         
         user.Should().NotBeNull();
         user.Email.Should().Be("newuser@demo.com");
-        repoMock.Verify(x => x.AddAsync(It.IsAny<RegisterRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        repoMock.Verify(x => x.AddAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

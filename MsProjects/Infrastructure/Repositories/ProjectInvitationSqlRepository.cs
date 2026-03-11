@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using MsProjects.Application.Models;
 using MsProjects.Infrastructure.Data;
 using MsProjects.Domain.Services;
+using MsProjects.Infrastructure.Persistence;
 
 namespace MsProjects.Infrastructure.Repositories;
 
@@ -55,11 +56,12 @@ public sealed class ProjectInvitationSqlRepository : IProjectInvitationRepositor
     {
         using var connection = _context.CreateConnection();
         
-        return await _context.QueryFirstOrDefaultAsync<ProjectInvitationModel>(
+        var entity = await _context.QueryFirstOrDefaultAsync<ProjectInvitationEntity>(
             connection,
             QueriesMySql.GetInvitationById,
             new { InvitationId = invitationId },
             cancellationToken);
+        return entity is null ? null : ToModel(entity);
     }
 
     public async Task<ProjectInvitationModel?> GetByTokenAsync(
@@ -68,11 +70,12 @@ public sealed class ProjectInvitationSqlRepository : IProjectInvitationRepositor
     {
         using var connection = _context.CreateConnection();
         
-        return await _context.QueryFirstOrDefaultAsync<ProjectInvitationModel>(
+        var entity = await _context.QueryFirstOrDefaultAsync<ProjectInvitationEntity>(
             connection,
             QueriesMySql.GetInvitationByToken,
             new { Token = token },
             cancellationToken);
+        return entity is null ? null : ToModel(entity);
     }
 
     public async Task<IEnumerable<ProjectInvitationModel>> GetPendingByProjectIdAsync(
@@ -81,11 +84,12 @@ public sealed class ProjectInvitationSqlRepository : IProjectInvitationRepositor
     {
         using var connection = _context.CreateConnection();
         
-        return await _context.QueryAsync<ProjectInvitationModel>(
+        var entities = await _context.QueryAsync<ProjectInvitationEntity>(
             connection,
             QueriesMySql.GetPendingInvitationsByProjectId,
             new { ProjectId = projectId },
             cancellationToken);
+        return entities.Select(ToModel);
     }
 
     public async Task<IEnumerable<ProjectInvitationModel>> GetByEmailAsync(
@@ -94,11 +98,12 @@ public sealed class ProjectInvitationSqlRepository : IProjectInvitationRepositor
     {
         using var connection = _context.CreateConnection();
         
-        return await _context.QueryAsync<ProjectInvitationModel>(
+        var entities = await _context.QueryAsync<ProjectInvitationEntity>(
             connection,
             QueriesMySql.GetInvitationsByEmail,
             new { Email = email },
             cancellationToken);
+        return entities.Select(ToModel);
     }
 
     public async Task AcceptAsync(
@@ -178,4 +183,8 @@ public sealed class ProjectInvitationSqlRepository : IProjectInvitationRepositor
         
         return count > 0;
     }
+
+    private static ProjectInvitationModel ToModel(ProjectInvitationEntity e) =>
+        new(e.IdProjectInvitation, e.ProjectId, e.ProjectName, e.Email, e.Role, e.RoleName,
+            e.Token, e.Status, e.InvitedBy, e.InvitedByName, e.CreatedAt, e.ExpiresAt, e.AcceptedAt, e.RejectedAt);
 }

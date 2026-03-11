@@ -18,6 +18,7 @@
             <MudText Typo="Typo.h6">TaskMesh</MudText>
             <MudSpacer />
             <MudText Typo="Typo.body1" Class="ml-4 mr-4">@AuthService.CurrentUser?.Name</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
             <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit">
                 <MudMenuItem OnClick="@Logout">Cerrar Sesión</MudMenuItem>
             </MudMenu>
@@ -29,10 +30,6 @@
                             Icon="@Icons.Material.Filled.Folder" 
                             Match="NavLinkMatch.Prefix">
                     Proyectos
-                </MudNavLink>
-                <MudNavLink Href="/tasks" 
-                            Icon="@Icons.Material.Filled.Task">
-                    Tareas
                 </MudNavLink>
                 <MudNavLink Href="/invitations" 
                             Icon="@Icons.Material.Filled.Mail">

@@ -22,7 +22,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 
         var (statusCode, title) = exception switch
         {
-            UnauthorizedAccessException => (HttpStatusCode.Unauthorized, "Unauthorized"),
+            UnauthorizedAccessException => (HttpStatusCode.Forbidden, "Forbidden"),
             ArgumentException => (HttpStatusCode.BadRequest, "Bad Request"),
             KeyNotFoundException => (HttpStatusCode.NotFound, "Not Found"),
             InvalidOperationException => (HttpStatusCode.BadRequest, "Invalid Operation"),

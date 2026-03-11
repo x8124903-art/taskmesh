@@ -1,382 +1,171 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
+using Moq;
 using MsProjects.Application.Controllers;
 using MsProjects.Application.Models;
-using MsProjects.Domain.Services;
-using MsProjects.Domain.Services.Authorization;
+using MsProjects.Application.UseCases.ProjectInvitation;
+using Xunit;
 
 namespace MsProjects.Tests.Application.Controllers;
 
 public sealed class ProjectInvitationsControllerShould
 {
-    [Fact]
-    public async Task CreateInvitation_WithValidRequest_ReturnsCreated()
+    private readonly Mock<ICreateProjectInvitationUseCase> _createMock = new();
+    private readonly Mock<IGetInvitationDetailsUseCase> _getDetailsMock = new();
+    private readonly Mock<IGetInvitationByTokenUseCase> _getByTokenMock = new();
+    private readonly Mock<IGetProjectPendingInvitationsUseCase> _getPendingMock = new();
+    private readonly Mock<IGetMyInvitationsUseCase> _getMyMock = new();
+    private readonly Mock<IAcceptProjectInvitationUseCase> _acceptMock = new();
+    private readonly Mock<IRejectProjectInvitationUseCase> _rejectMock = new();
+    private readonly Mock<ICancelProjectInvitationUseCase> _cancelMock = new();
+    private readonly ProjectInvitationsController _controller;
+
+    public ProjectInvitationsControllerShould()
     {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        var request = new InviteMemberRequest(1, "test@demo.com", "Member");
-        var invitation = new ProjectInvitationModel(1, 1, "Project One", "test@demo.com", 3, "Member", "token123", "Pending", 100, "Inviter", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        
-        authServiceMock.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin))
-            .ReturnsAsync(true);
-        
-        invitationServiceMock.Setup(x => x.CreateInvitationAsync(request, 100, It.IsAny<CancellationToken>(), It.IsAny<string?>()))
-            .ReturnsAsync(invitation);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
+        _controller = new ProjectInvitationsController(
+            _createMock.Object, _getDetailsMock.Object, _getByTokenMock.Object,
+            _getPendingMock.Object, _getMyMock.Object, _acceptMock.Object,
+            _rejectMock.Object, _cancelMock.Object);
+
+        _controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext()
         };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.CreateInvitation(request, CancellationToken.None);
-        
+        _controller.HttpContext.Request.Headers["X-User-Id"] = "100";
+    }
+
+    [Fact]
+    public async Task CreateInvitation_ReturnsCreatedAtAction()
+    {
+        var request = new InviteMemberRequest(1, "test@demo.com", "Member");
+        var invitation = new ProjectInvitationModel(1, 1, "Project One", "test@demo.com", 3, "Member", "token123", "Pending", 100, "Inviter", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
+
+        _createMock.Setup(x => x.ExecuteAsync(request, 100, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invitation);
+
+        var result = await _controller.CreateInvitation(request, CancellationToken.None);
+
         result.Should().BeOfType<CreatedAtActionResult>();
-        var createdResult = result as CreatedAtActionResult;
-        createdResult!.Value.Should().Be(invitation);
+        ((CreatedAtActionResult)result).Value.Should().Be(invitation);
     }
 
     [Fact]
-    public async Task CreateInvitation_WithoutPermission_ReturnsForbid()
+    public async Task GetInvitationById_ReturnsOk()
     {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        var request = new InviteMemberRequest(1, "test@demo.com", "Member");
-        
-        authServiceMock.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin))
-            .ReturnsAsync(false);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.CreateInvitation(request, CancellationToken.None);
-        
-        result.Should().BeOfType<StatusCodeResult>()
-            .Which.StatusCode.Should().Be(403);
-    }
-
-    [Fact]
-    public async Task GetInvitationById_WithValidId_ReturnsOk()
-    {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        var invitation = new ProjectInvitationModel(1, 1, "Project One", "test@demo.com", 3, "Member", "token123", "Pending", 100, "Inviter", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        
-        invitationServiceMock.Setup(x => x.GetInvitationByIdAsync(1, It.IsAny<CancellationToken>()))
+        var invitation = new ProjectInvitationModel(1, 1, "P", "e@e.com", 3, "Member", "tok", "Pending", 100, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
+        _getDetailsMock.Setup(x => x.ExecuteAsync(1, 100, It.IsAny<CancellationToken>()))
             .ReturnsAsync(invitation);
-        
-        authServiceMock.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin))
-            .ReturnsAsync(true);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.GetInvitationById(1, CancellationToken.None);
-        
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        okResult!.Value.Should().Be(invitation);
+
+        var result = await _controller.GetInvitationById(1, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().Be(invitation);
     }
 
     [Fact]
-    public async Task GetInvitationById_WithInvalidId_ReturnsNotFound()
+    public async Task GetInvitationByToken_ReturnsOk()
     {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        invitationServiceMock.Setup(x => x.GetInvitationByIdAsync(999, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ProjectInvitationModel?)null);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.GetInvitationById(999, CancellationToken.None);
-        
-        result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task AcceptInvitation_WithValidToken_ReturnsOk()
-    {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        var request = new AcceptInvitationRequest("token123");
-        
-        invitationServiceMock.Setup(x => x.AcceptInvitationAsync("token123", 100, It.IsAny<CancellationToken>(), It.IsAny<string?>(), It.IsAny<string?>()))
-            .Returns(Task.CompletedTask);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.AcceptInvitation(request, CancellationToken.None);
-        
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetMyInvitations_WithEmailAndStatus_ReturnsFilteredInvitations()
-    {
-        var invitationServiceMock = new Mock<IProjectInvitationService>();
-        var authServiceMock = new Mock<IProjectAuthorizationService>();
-        var loggerMock = new Mock<ILogger<ProjectInvitationsController>>();
-        
-        var invitations = new List<ProjectInvitationModel>
-        {
-            new ProjectInvitationModel(1, 1, "Project One", "test@demo.com", 3, "Member", "token1", "Pending", 100, "Inviter", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null),
-            new ProjectInvitationModel(2, 2, "Project Two", "test@demo.com", 3, "Member", "token2", "Accepted", 100, "Inviter", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), DateTime.UtcNow, null)
-        };
-        
-        invitationServiceMock.Setup(x => x.GetInvitationsByEmailAsync("test@demo.com", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(invitations);
-        
-        var controller = new ProjectInvitationsController(invitationServiceMock.Object, authServiceMock.Object, loggerMock.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "100";
-        
-        var result = await controller.GetMyInvitations("test@demo.com", "Pending", CancellationToken.None);
-        
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        var returnedInvitations = okResult!.Value as IEnumerable<ProjectInvitationModel>;
-        returnedInvitations.Should().HaveCount(1);
-        returnedInvitations!.First().Status.Should().Be("Pending");
-    }
-
-    private static ProjectInvitationsController CreateController(
-        Mock<IProjectInvitationService> invSvc,
-        Mock<IProjectAuthorizationService> authSvc,
-        string userId = "100")
-    {
-        var logger = new Mock<ILogger<ProjectInvitationsController>>();
-        var controller = new ProjectInvitationsController(invSvc.Object, authSvc.Object, logger.Object);
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
-        controller.HttpContext.Request.Headers["X-User-Id"] = userId;
-        return controller;
-    }
-
-    [Fact]
-    public async Task GetInvitationByToken_WithValidToken_ReturnsOk()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
         var invitation = new ProjectInvitationModel(1, 1, "P", "e@e.com", 3, "Member", "tok", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        invSvc.Setup(x => x.GetInvitationByTokenAsync("tok", It.IsAny<CancellationToken>())).ReturnsAsync(invitation);
-        var controller = CreateController(invSvc, authSvc);
+        _getByTokenMock.Setup(x => x.ExecuteAsync("tok", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invitation);
 
-        var result = await controller.GetInvitationByToken("tok", CancellationToken.None);
+        var result = await _controller.GetInvitationByToken("tok", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
         ((OkObjectResult)result).Value.Should().Be(invitation);
     }
 
     [Fact]
-    public async Task GetInvitationByToken_WithInvalidToken_ReturnsNotFound()
+    public async Task GetPendingInvitations_ReturnsOk()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        invSvc.Setup(x => x.GetInvitationByTokenAsync("bad", It.IsAny<CancellationToken>())).ReturnsAsync((ProjectInvitationModel?)null);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.GetInvitationByToken("bad", CancellationToken.None);
-
-        result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task GetPendingInvitations_WithPermission_ReturnsOk()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        authSvc.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin)).ReturnsAsync(true);
         var invitations = new List<ProjectInvitationModel>();
-        invSvc.Setup(x => x.GetPendingInvitationsAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(invitations);
-        var controller = CreateController(invSvc, authSvc);
+        _getPendingMock.Setup(x => x.ExecuteAsync(1, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invitations);
 
-        var result = await controller.GetPendingInvitations(1, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetPendingInvitations_WithoutPermission_ReturnsForbid()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        authSvc.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin)).ReturnsAsync(false);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.GetPendingInvitations(1, CancellationToken.None);
-
-        result.Should().BeOfType<StatusCodeResult>()
-            .Which.StatusCode.Should().Be(403);
-    }
-
-    [Fact]
-    public async Task GetInvitationById_WithoutPermission_ReturnsForbid()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var invitation = new ProjectInvitationModel(1, 1, "P", "e@e.com", 3, "Member", "tok", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        invSvc.Setup(x => x.GetInvitationByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(invitation);
-        authSvc.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin)).ReturnsAsync(false);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.GetInvitationById(1, CancellationToken.None);
-
-        result.Should().BeOfType<StatusCodeResult>()
-            .Which.StatusCode.Should().Be(403);
-    }
-
-    [Fact]
-    public async Task RejectInvitation_WithValidToken_ReturnsOk()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        invSvc.Setup(x => x.RejectInvitationAsync("tok", It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.RejectInvitation(new RejectInvitationRequest("tok"), CancellationToken.None);
+        var result = await _controller.GetPendingInvitations(1, CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
-    public async Task DeleteInvitation_WithPermission_ReturnsNoContent()
+    public async Task GetMyInvitations_ReturnsOk_WithInvitations()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var invitation = new ProjectInvitationModel(1, 1, "P", "e@e.com", 3, "Member", "tok", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        invSvc.Setup(x => x.GetInvitationByTokenAsync("tok", It.IsAny<CancellationToken>())).ReturnsAsync(invitation);
-        invSvc.Setup(x => x.DeleteInvitationAsync("tok", It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        authSvc.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin)).ReturnsAsync(true);
-        var controller = CreateController(invSvc, authSvc);
+        var invitations = new List<ProjectInvitationModel>
+        {
+            new(1, 1, "P", "a@a.com", 3, "Member", "t1", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null)
+        };
+        _getMyMock.Setup(x => x.ExecuteAsync("a@a.com", null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(invitations);
 
-        var result = await controller.DeleteInvitation("tok", CancellationToken.None);
+        var result = await _controller.GetMyInvitations("a@a.com", null, CancellationToken.None);
 
-        result.Should().BeOfType<NoContentResult>();
+        result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
-    public async Task DeleteInvitation_WithoutPermission_ReturnsForbid()
+    public async Task GetMyInvitations_ReturnsBadRequest_WhenEmailEmpty()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var invitation = new ProjectInvitationModel(1, 1, "P", "e@e.com", 3, "Member", "tok", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null);
-        invSvc.Setup(x => x.GetInvitationByTokenAsync("tok", It.IsAny<CancellationToken>())).ReturnsAsync(invitation);
-        authSvc.Setup(x => x.HasProjectRoleAsync(100, 1, It.IsAny<CancellationToken>(), ProjectRoles.Owner, ProjectRoles.Admin)).ReturnsAsync(false);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.DeleteInvitation("tok", CancellationToken.None);
-
-        result.Should().BeOfType<StatusCodeResult>()
-            .Which.StatusCode.Should().Be(403);
-    }
-
-    [Fact]
-    public async Task DeleteInvitation_WithInvalidToken_ReturnsNotFound()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        invSvc.Setup(x => x.GetInvitationByTokenAsync("bad", It.IsAny<CancellationToken>())).ReturnsAsync((ProjectInvitationModel?)null);
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.DeleteInvitation("bad", CancellationToken.None);
-
-        result.Should().BeOfType<NotFoundObjectResult>();
-    }
-
-    [Fact]
-    public async Task GetMyInvitations_WithEmptyEmail_ReturnsBadRequest()
-    {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var controller = CreateController(invSvc, authSvc);
-
-        var result = await controller.GetMyInvitations("", null, CancellationToken.None);
+        var result = await _controller.GetMyInvitations("", null, CancellationToken.None);
 
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
-    public async Task GetMyInvitations_WithoutStatusFilter_ReturnsAll()
+    public async Task AcceptInvitation_ReturnsOk()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var invitations = new List<ProjectInvitationModel>
-        {
-            new(1, 1, "P", "a@a.com", 3, "Member", "t1", "Pending", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), null, null),
-            new(2, 1, "P", "a@a.com", 3, "Member", "t2", "Accepted", 1, "A", DateTime.UtcNow, DateTime.UtcNow.AddDays(7), DateTime.UtcNow, null)
-        };
-        invSvc.Setup(x => x.GetInvitationsByEmailAsync("a@a.com", It.IsAny<CancellationToken>())).ReturnsAsync(invitations);
-        var controller = CreateController(invSvc, authSvc);
+        _acceptMock.Setup(x => x.ExecuteAsync("token123", 100, It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        var result = await controller.GetMyInvitations("a@a.com", null, CancellationToken.None);
+        var result = await _controller.AcceptInvitation(new AcceptInvitationRequest("token123"), CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>();
-        var items = ((OkObjectResult)result).Value as IEnumerable<ProjectInvitationModel>;
-        items.Should().HaveCount(2);
     }
 
     [Fact]
-    public void GetCurrentUserId_WithMissingHeader_ThrowsUnauthorizedAccessException()
+    public async Task RejectInvitation_ReturnsOk()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var logger = new Mock<ILogger<ProjectInvitationsController>>();
-        var controller = new ProjectInvitationsController(invSvc.Object, authSvc.Object, logger.Object);
-        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        _rejectMock.Setup(x => x.ExecuteAsync("tok", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        Func<Task> act = () => controller.CreateInvitation(new InviteMemberRequest(1, "e@e.com", "Member"), CancellationToken.None);
+        var result = await _controller.RejectInvitation(new RejectInvitationRequest("tok"), CancellationToken.None);
 
-        act.Should().ThrowAsync<UnauthorizedAccessException>();
+        result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]
-    public void GetCurrentUserId_WithInvalidHeader_ThrowsArgumentException()
+    public async Task DeleteInvitation_ReturnsNoContent()
     {
-        var invSvc = new Mock<IProjectInvitationService>();
-        var authSvc = new Mock<IProjectAuthorizationService>();
-        var logger = new Mock<ILogger<ProjectInvitationsController>>();
-        var controller = new ProjectInvitationsController(invSvc.Object, authSvc.Object, logger.Object);
-        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
-        controller.HttpContext.Request.Headers["X-User-Id"] = "not-a-number";
+        _cancelMock.Setup(x => x.ExecuteAsync("tok", 100, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        Func<Task> act = () => controller.CreateInvitation(new InviteMemberRequest(1, "e@e.com", "Member"), CancellationToken.None);
+        var result = await _controller.DeleteInvitation("tok", CancellationToken.None);
 
-        act.Should().ThrowAsync<ArgumentException>();
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task CreateInvitation_ThrowsUnauthorized_WhenNoUserIdHeader()
+    {
+        _controller.HttpContext.Request.Headers.Remove("X-User-Id");
+
+        Func<Task> act = () => _controller.CreateInvitation(new InviteMemberRequest(1, "e@e.com", "Member"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task CreateInvitation_ThrowsArgumentException_WhenInvalidUserId()
+    {
+        _controller.HttpContext.Request.Headers["X-User-Id"] = "not-a-number";
+
+        Func<Task> act = () => _controller.CreateInvitation(new InviteMemberRequest(1, "e@e.com", "Member"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>();
     }
 }

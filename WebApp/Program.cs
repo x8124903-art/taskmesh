@@ -28,6 +28,7 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddMudServices();
 
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IAuthService>(sp => sp.GetRequiredService<AuthService>());
 builder.Services.AddScoped<ProjectApiService>();
 builder.Services.AddScoped<ProjectInvitationApiService>();
 builder.Services.AddScoped<ProjectStateService>();

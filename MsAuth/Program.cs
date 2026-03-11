@@ -7,6 +7,8 @@ using MsAuth.Infrastructure.Data;
 using MsAuth.Infrastructure.Repositories;
 using MsAuth.Infrastructure.Options;
 
+using MsAuth.Application.UseCases.Auth;
+
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,10 +16,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
 builder.Services.AddSingleton<IDapperContext, DapperContext>();
 builder.Services.AddScoped<IUserRepository, UserSqlRepository>();
-builder.Services.AddScoped<PasswordHasher>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenSqlRepository>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+
+builder.Services.AddScoped<IRegisterUseCase, RegisterUseCase>();
+builder.Services.AddScoped<ILoginUseCase, LoginUseCase>();
+builder.Services.AddScoped<IRefreshTokenUseCase, RefreshTokenUseCase>();
+builder.Services.AddScoped<ILogoutUseCase, LogoutUseCase>();
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
 builder.Services.AddSingleton<IJwtService>(_ => new JwtService(
@@ -26,6 +33,9 @@ builder.Services.AddSingleton<IJwtService>(_ => new JwtService(
     jwtSection["Audience"],
     int.Parse(jwtSection["AccessTokenExpirationMinutes"] ?? "15")
 ));
+
+builder.Services.AddExceptionHandler<MsAuth.Infrastructure.GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -46,6 +56,7 @@ var app = builder.Build();
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "Healthy", service = "MsAuth" }));
 
+app.UseExceptionHandler();
 app.UseCors("AllowWebApp");
 app.MapControllers();
 app.UseSwagger();

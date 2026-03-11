@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using MsAuth.Application.Models;
+using MsAuth.Infrastructure.Persistence;
 
 namespace MsAuth.Infrastructure.Repositories
 {
@@ -16,34 +17,38 @@ namespace MsAuth.Infrastructure.Repositories
         public async Task<UserModel?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
             using var connection = _context.CreateConnection();
-            return await _context.QueryFirstOrDefaultAsync<UserModel>(
+            var entity = await _context.QueryFirstOrDefaultAsync<UserEntity>(
                 connection,
                 QueriesMySql.GetById,
                 new { IdUser = id },
                 cancellationToken);
+            return entity is null ? null : ToModel(entity);
         }
 
         public async Task<UserModel?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
         {
             using var connection = _context.CreateConnection();
-            return await _context.QueryFirstOrDefaultAsync<UserModel>(
+            var entity = await _context.QueryFirstOrDefaultAsync<UserEntity>(
                 connection,
                 QueriesMySql.GetByEmail,
                 new { Email = email },
                 cancellationToken);
+            return entity is null ? null : ToModel(entity);
         }
 
-        public async Task<UserModel> AddAsync(RegisterRequest request, CancellationToken cancellationToken = default)
+        public async Task<UserModel> AddAsync(string email, string name, string passwordHash, CancellationToken cancellationToken = default)
         {
             using var connection = _context.CreateConnection();
             var now = DateTime.UtcNow;
-            var passwordHash = request.Password;
             var id = await _context.ExecuteScalarAsync<int>(
                 connection,
                 QueriesMySql.Insert,
-                new { request.Email, request.Name, PasswordHash = passwordHash, CreatedAt = now },
+                new { Email = email, Name = name, PasswordHash = passwordHash, CreatedAt = now },
                 cancellationToken);
-            return new UserModel(id, request.Email, request.Name, passwordHash, false, now);
+            return new UserModel(id, email, name, passwordHash, false, now);
         }
+
+        private static UserModel ToModel(UserEntity e) =>
+            new(e.IdUser, e.Email, e.Name, e.PasswordHash, e.IsDeleted, e.CreatedAt);
     }
 }

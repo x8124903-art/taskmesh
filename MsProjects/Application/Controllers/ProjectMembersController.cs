@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MsProjects.Application.Models;
-using MsProjects.Domain.Services;
-using MsProjects.Domain.Services.Authorization;
+using MsProjects.Application.UseCases.ProjectMember;
 
 namespace MsProjects.Application.Controllers;
 
@@ -9,15 +8,18 @@ namespace MsProjects.Application.Controllers;
 [Route("projects/{projectId}/members")]
 public sealed class ProjectMembersController : ControllerBase
 {
-    private readonly IProjectMemberService _service;
-    private readonly IProjectAuthorizationService _authService;
+    private readonly IGetProjectMembersUseCase _getMembers;
+    private readonly IChangeProjectMemberRoleUseCase _changeRole;
+    private readonly IRemoveProjectMemberUseCase _removeMember;
 
     public ProjectMembersController(
-        IProjectMemberService service,
-        IProjectAuthorizationService authService)
+        IGetProjectMembersUseCase getMembers,
+        IChangeProjectMemberRoleUseCase changeRole,
+        IRemoveProjectMemberUseCase removeMember)
     {
-        _service = service;
-        _authService = authService;
+        _getMembers = getMembers;
+        _changeRole = changeRole;
+        _removeMember = removeMember;
     }
 
     private int GetCurrentUserId()
@@ -36,13 +38,7 @@ public sealed class ProjectMembersController : ControllerBase
     public async Task<IActionResult> GetMembers(int projectId, CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        if (!await _authService.IsProjectMemberAsync(currentUserId, projectId, cancellationToken))
-        {
-            return Forbid();
-        }
-        
-        var members = await _service.GetMembersAsync(projectId, cancellationToken);
+        var members = await _getMembers.ExecuteAsync(projectId, currentUserId, cancellationToken);
         return Ok(members);
     }
 
@@ -50,14 +46,7 @@ public sealed class ProjectMembersController : ControllerBase
     public async Task<IActionResult> ChangeRole(int projectId, int userId, [FromBody] ChangeRoleRequest request, CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        if (!await _authService.HasProjectRoleAsync(currentUserId, projectId, cancellationToken, 
-            ProjectRoles.Owner, ProjectRoles.Admin))
-        {
-            return Forbid();
-        }
-        
-        await _service.ChangeRoleAsync(projectId, userId, request.Role, cancellationToken);
+        await _changeRole.ExecuteAsync(projectId, userId, request.Role, currentUserId, cancellationToken);
         return NoContent();
     }
 
@@ -65,14 +54,7 @@ public sealed class ProjectMembersController : ControllerBase
     public async Task<IActionResult> RemoveMember(int projectId, int userId, CancellationToken cancellationToken)
     {
         var currentUserId = GetCurrentUserId();
-        
-        if (!await _authService.HasProjectRoleAsync(currentUserId, projectId, cancellationToken, 
-            ProjectRoles.Owner, ProjectRoles.Admin))
-        {
-            return Forbid();
-        }
-        
-        await _service.RemoveMemberAsync(projectId, userId, cancellationToken);
+        await _removeMember.ExecuteAsync(projectId, userId, currentUserId, cancellationToken);
         return NoContent();
     }
 }

@@ -6,6 +6,6 @@ namespace MsAuth.Infrastructure.Repositories
     {
         Task<UserModel?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
         Task<UserModel?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
-        Task<UserModel> AddAsync(RegisterRequest request, CancellationToken cancellationToken = default);
+        Task<UserModel> AddAsync(string email, string name, string passwordHash, CancellationToken cancellationToken = default);
     }
 }

@@ -1,6 +1,6 @@
 namespace MsAuth.Domain.Services;
 
-public sealed class PasswordHasher
+public sealed class PasswordHasher : IPasswordHasher
 {
     public string HashPassword(string password)
     {

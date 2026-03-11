@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MsAuth.Application.Models;
+using MsAuth.Application.UseCases.Auth;
 
 namespace MsAuth.Application.Controllers
 {
@@ -7,88 +8,48 @@ namespace MsAuth.Application.Controllers
     [Route("auth")]
     public sealed class AuthController : ControllerBase
     {
-        private readonly MsAuth.Domain.Services.IUserService _service;
-        private readonly MsAuth.Domain.Services.IJwtService _jwtService;
-        private readonly MsAuth.Domain.Services.IRefreshTokenService _refreshTokenService;
+        private readonly IRegisterUseCase _registerUseCase;
+        private readonly ILoginUseCase _loginUseCase;
+        private readonly IRefreshTokenUseCase _refreshTokenUseCase;
+        private readonly ILogoutUseCase _logoutUseCase;
 
         public AuthController(
-            MsAuth.Domain.Services.IUserService service,
-            MsAuth.Domain.Services.IJwtService jwtService,
-            MsAuth.Domain.Services.IRefreshTokenService refreshTokenService)
+            IRegisterUseCase registerUseCase,
+            ILoginUseCase loginUseCase,
+            IRefreshTokenUseCase refreshTokenUseCase,
+            ILogoutUseCase logoutUseCase)
         {
-            _service = service;
-            _jwtService = jwtService;
-            _refreshTokenService = refreshTokenService;
+            _registerUseCase = registerUseCase;
+            _loginUseCase = loginUseCase;
+            _refreshTokenUseCase = refreshTokenUseCase;
+            _logoutUseCase = logoutUseCase;
         }
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-            
-            try
-            {
-                var user = await _service.RegisterAsync(request, cancellationToken);
-                var accessToken = _jwtService.GenerateToken(user);
-                var refreshToken = Guid.NewGuid().ToString();
-                var expiresAt = DateTime.UtcNow.AddDays(7);
-                await _refreshTokenService.AddAsync(
-                    new Application.Models.RefreshTokenModel(
-                        0, refreshToken, user.IdUser, expiresAt, false, DateTime.UtcNow, null
-                    ), cancellationToken);
-                var userResponse = new UserResponse(user.IdUser, user.Email, user.Name, user.CreatedAt);
-                var response = new Application.Models.RegisterResponse(accessToken, refreshToken, userResponse);
-                return StatusCode(201, response);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { error = ex.Message });
-            }
+            var response = await _registerUseCase.ExecuteAsync(request, cancellationToken);
+            return StatusCode(201, response);
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-            
-            var user = await _service.ValidateCredentialsAsync(request.Email, request.Password, cancellationToken);
-            if (user == null)
-                return Unauthorized();
-            var accessToken = _jwtService.GenerateToken(user);
-            var refreshToken = Guid.NewGuid().ToString();
-            var expiresAt = DateTime.UtcNow.AddDays(7);
-            await _refreshTokenService.AddAsync(
-                new Application.Models.RefreshTokenModel(
-                    0, refreshToken, user.IdUser, expiresAt, false, DateTime.UtcNow, null
-                ), cancellationToken);
-            var userResponse = new UserResponse(user.IdUser, user.Email, user.Name, user.CreatedAt);
-            var response = new Application.Models.LoginResponse(accessToken, refreshToken, userResponse);
+            var response = await _loginUseCase.ExecuteAsync(request, cancellationToken);
             return Ok(response);
         }
 
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] Application.Controllers.Auth.RefreshTokenRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> Refresh([FromBody] Auth.RefreshTokenRequest request, CancellationToken cancellationToken)
         {
-            var token = await _refreshTokenService.GetByTokenAsync(request.RefreshToken, cancellationToken);
-            if (token == null || token.IsRevoked || token.ExpiresAt < DateTime.UtcNow)
-                return Unauthorized();
-            var user = await _service.GetByIdAsync(token.UserId, cancellationToken);
-            if (user == null)
-                return Unauthorized();
-            var accessToken = _jwtService.GenerateToken(user);
+            var accessToken = await _refreshTokenUseCase.ExecuteAsync(request.RefreshToken, cancellationToken);
             return Ok(new { AccessToken = accessToken });
         }
 
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromBody] Application.Controllers.Auth.LogoutRequest request, CancellationToken cancellationToken)
+        public async Task<IActionResult> Logout([FromBody] Auth.LogoutRequest request, CancellationToken cancellationToken)
         {
-            await _refreshTokenService.RevokeAsync(request.RefreshToken, cancellationToken);
+            await _logoutUseCase.ExecuteAsync(request.RefreshToken, cancellationToken);
             return NoContent();
         }
     }
