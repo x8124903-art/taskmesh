@@ -1,0 +1,17 @@
+@page "/"
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/projects");
+        }
+        else
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+}

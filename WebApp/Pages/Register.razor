@@ -1,0 +1,102 @@
+@page "/register"
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+<MudPaper Class="pa-4 mx-auto mt-8" Style="max-width:400px;">
+    <MudText Typo="Typo.h5" Class="mb-4">Registro</MudText>
+    <EditForm Model="@registerModel" OnValidSubmit="HandleRegister">
+        <DataAnnotationsValidator />
+        <MudTextField @bind-Value="registerModel.Name" 
+                      Label="Nombre" 
+                      Variant="Variant.Outlined" 
+                      Required="true" 
+                      Class="mb-3" />
+        <MudTextField @bind-Value="registerModel.Email" 
+                      Label="Email" 
+                      Variant="Variant.Outlined" 
+                      Required="true" 
+                      InputType="InputType.Email"
+                      Class="mb-3" />
+        <MudTextField @bind-Value="registerModel.Password" 
+                      Label="Contraseña" 
+                      Variant="Variant.Outlined" 
+                      InputType="InputType.Password" 
+                      Required="true"
+                      Class="mb-3" />
+        <MudTextField @bind-Value="registerModel.ConfirmPassword" 
+                      Label="Confirmar Contraseña" 
+                      Variant="Variant.Outlined" 
+                      InputType="InputType.Password" 
+                      Required="true"
+                      Class="mb-3" />
+        <MudButton ButtonType="ButtonType.Submit" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   FullWidth="true" 
+                   Disabled="@isSubmitting">
+            @(isSubmitting ? "Registrando..." : "Registrarse")
+        </MudButton>
+    </EditForm>
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-2">@errorMessage</MudAlert>
+    }
+    <MudText Class="mt-3" Align="Align.Center">
+        ¿Ya tienes cuenta? <MudLink Href="/login">Inicia sesión</MudLink>
+    </MudText>
+</MudPaper>
+
+@code {
+    private RegisterModel registerModel = new();
+    private bool isSubmitting = false;
+    private string errorMessage = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/projects");
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        errorMessage = string.Empty;
+        
+        if (registerModel.Password != registerModel.ConfirmPassword)
+        {
+            errorMessage = "Las contraseñas no coinciden";
+            return;
+        }
+
+        isSubmitting = true;
+        try
+        {
+            var success = await AuthService.RegisterAsync(
+                registerModel.Email, 
+                registerModel.Name, 
+                registerModel.Password);
+            
+            if (success)
+            {
+                Navigation.NavigateTo("/projects");
+            }
+            else
+            {
+                errorMessage = "Error al registrar. El email puede estar ya en uso.";
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    public class RegisterModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

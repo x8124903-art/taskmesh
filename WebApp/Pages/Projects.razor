@@ -1,0 +1,143 @@
+@page "/projects"
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject WebApp.Services.AuthService AuthService
+@inject WebApp.Services.ProjectStateService ProjectStateService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-4">Mis Proyectos</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween">
+        <MudTextField @bind-Value="searchString" 
+                      Label="Buscar" 
+                      Variant="Variant.Outlined"
+                      Adornment="Adornment.Start" 
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Style="max-width: 400px;" />
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Nuevo Proyecto
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (projects.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">No tienes proyectos aún. ¡Crea tu primer proyecto!</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var project in FilteredProjects)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Style="cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" 
+                         Class="hover-card"
+                         @onclick="@(() => NavigateToProject(project.IdProject))">
+                    <MudCardContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
+                            <MudText Typo="Typo.h6" Style="font-weight: 600;">@project.Name</MudText>
+                            <MudChip Size="Size.Small" Color="GetStatusColor(project.StatusName)" Variant="Variant.Filled">
+                                @project.StatusName
+                            </MudChip>
+                        </MudStack>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3" Style="min-height: 40px;">
+                            @(string.IsNullOrEmpty(project.Description) ? "Sin descripción" : project.Description)
+                        </MudText>
+                        <MudDivider Class="my-2" />
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                            <MudStack Row="false" Spacing="1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                    @project.CreatedByName
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" Class="mr-1" />
+                                    @project.CreatedAt.ToString("dd/MM/yyyy")
+                                </MudText>
+                            </MudStack>
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Primary" Size="Size.Small" />
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<WebApp.Models.Projects.Project> projects = new();
+    private string searchString = string.Empty;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        
+        ProjectStateService.OnProjectsChanged += HandleProjectsChanged;
+        
+        await LoadProjectsAsync();
+    }
+    
+    private async void HandleProjectsChanged()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadProjectsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        loading = true;
+        try
+        {
+            projects = await ProjectService.GetAllAsync();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+    
+    public void Dispose()
+    {
+        ProjectStateService.OnProjectsChanged -= HandleProjectsChanged;
+    }
+
+    private IEnumerable<WebApp.Models.Projects.Project> FilteredProjects =>
+        string.IsNullOrWhiteSpace(searchString)
+            ? projects
+            : projects.Where(p => p.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase));
+
+    private void OpenCreateDialog()
+    {
+        Navigation.NavigateTo("/projects/create");
+    }
+
+    private void NavigateToProject(int projectId)
+    {
+        Navigation.NavigateTo($"/projects/{projectId}");
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Success,
+        "Archived" => Color.Default,
+        "Paused" => Color.Warning,
+        _ => Color.Info
+    };
+}
+

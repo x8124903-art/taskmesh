@@ -1,0 +1,80 @@
+USE taskmesh_projects;
+
+CREATE TABLE IF NOT EXISTS ProjectRole (
+    IdProjectRole INT PRIMARY KEY,
+    Name VARCHAR(50) NOT NULL UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO ProjectRole (IdProjectRole, Name) VALUES 
+    (1, 'Owner'), 
+    (2, 'Admin'), 
+    (3, 'Member'), 
+    (4, 'Viewer')
+ON DUPLICATE KEY UPDATE Name=Name;
+
+CREATE TABLE IF NOT EXISTS ProjectStatus (
+    IdProjectStatus INT PRIMARY KEY,
+    Name VARCHAR(50) NOT NULL UNIQUE,
+    Description VARCHAR(200)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO ProjectStatus (IdProjectStatus, Name, Description) VALUES 
+    (1, 'Active', 'Proyecto activo en desarrollo'),
+    (2, 'Paused', 'Proyecto pausado temporalmente'),
+    (3, 'Completed', 'Proyecto completado exitosamente'),
+    (4, 'Archived', 'Proyecto archivado')
+ON DUPLICATE KEY UPDATE Name=Name;
+
+CREATE TABLE IF NOT EXISTS Project (
+    IdProject INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL,
+    Description VARCHAR(500),
+    Status INT NOT NULL,
+    CreatedBy INT NOT NULL,
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    IsDeleted BOOLEAN DEFAULT FALSE,
+    INDEX idx_created_by (CreatedBy),
+    INDEX idx_status (Status),
+    FOREIGN KEY (Status) REFERENCES ProjectStatus(IdProjectStatus)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ProjectMember (
+    IdProjectMember INT AUTO_INCREMENT PRIMARY KEY,
+    ProjectId INT NOT NULL,
+    UserId INT NOT NULL,
+    Role INT NOT NULL,
+    UserName VARCHAR(100) DEFAULT NULL,
+    Email VARCHAR(255) DEFAULT NULL,
+    InvitedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    JoinedAt DATETIME NULL,
+    INDEX idx_project_id (ProjectId),
+    INDEX idx_user_id (UserId),
+    INDEX idx_project_user (ProjectId, UserId),
+    INDEX idx_role (Role),
+    UNIQUE KEY unique_project_user (ProjectId, UserId),
+    FOREIGN KEY (ProjectId) REFERENCES Project(IdProject) ON DELETE CASCADE,
+    FOREIGN KEY (Role) REFERENCES ProjectRole(IdProjectRole)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ProjectInvitation (
+    IdProjectInvitation INT AUTO_INCREMENT PRIMARY KEY,
+    ProjectId INT NOT NULL,
+    Email VARCHAR(255) NOT NULL,
+    Role INT NOT NULL,
+    Token VARCHAR(500) NOT NULL UNIQUE,
+    Status VARCHAR(20) NOT NULL,
+    InvitedByUserId INT NOT NULL,
+    InvitedByName VARCHAR(100) DEFAULT NULL,
+    InvitedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ExpiresAt DATETIME NOT NULL,
+    AcceptedAt DATETIME NULL,
+    RejectedAt DATETIME NULL,
+    INDEX idx_token (Token),
+    INDEX idx_project (ProjectId),
+    INDEX idx_email (Email),
+    INDEX idx_status (Status),
+    INDEX idx_role (Role),
+    FOREIGN KEY (ProjectId) REFERENCES Project(IdProject) ON DELETE CASCADE,
+    FOREIGN KEY (Role) REFERENCES ProjectRole(IdProjectRole)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

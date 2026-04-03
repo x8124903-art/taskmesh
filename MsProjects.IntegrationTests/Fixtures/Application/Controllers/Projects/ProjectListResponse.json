@@ -1,0 +1,18 @@
+[
+  {
+    "idProject": 1,
+    "name": "Project One",
+    "description": "First test project",
+    "status": 1,
+    "createdBy": 1,
+    "createdAt": "2026-03-09T10:00:00"
+  },
+  {
+    "idProject": 2,
+    "name": "Project Two",
+    "description": "Second test project",
+    "status": 1,
+    "createdBy": 1,
+    "createdAt": "2026-03-09T11:00:00"
+  }
+]

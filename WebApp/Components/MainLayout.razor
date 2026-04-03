@@ -1,0 +1,75 @@
+@namespace WebApp.Components
+@inherits LayoutComponentBase
+@inject WebApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    @if (AuthService.IsAuthenticated)
+    {
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" 
+                           Color="Color.Inherit" 
+                           Edge="Edge.Start" 
+                           OnClick="@ToggleDrawer" />
+            <MudText Typo="Typo.h6">TaskMesh</MudText>
+            <MudSpacer />
+            <MudText Typo="Typo.body1" Class="ml-4 mr-4">@AuthService.CurrentUser?.Name</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
+            <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit">
+                <MudMenuItem OnClick="@Logout">Cerrar Sesión</MudMenuItem>
+            </MudMenu>
+        </MudAppBar>
+        
+        <MudDrawer @bind-Open="@_drawerOpen" Elevation="1" ClipMode="@DrawerClipMode.Always">
+            <MudNavMenu>
+                <MudNavLink Href="/projects" 
+                            Icon="@Icons.Material.Filled.Folder" 
+                            Match="NavLinkMatch.Prefix">
+                    Proyectos
+                </MudNavLink>
+                <MudNavLink Href="/invitations" 
+                            Icon="@Icons.Material.Filled.Mail">
+                    Invitaciones
+                </MudNavLink>
+            </MudNavMenu>
+        </MudDrawer>
+        
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 mb-4">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    }
+    else
+    {
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    }
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+}
