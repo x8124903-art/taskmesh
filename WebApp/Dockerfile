@@ -1,14 +1,14 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ["webapp.csproj", "./"]
-RUN dotnet restore "webapp.csproj"
+COPY ["WebApp.csproj", "./"]
+RUN dotnet restore "WebApp.csproj"
 
 COPY . .
-RUN dotnet build "webapp.csproj" -c Release -o /app/build
+RUN dotnet build "WebApp.csproj" -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "webapp.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "WebApp.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM nginx:alpine AS final
 WORKDIR /usr/share/nginx/html
