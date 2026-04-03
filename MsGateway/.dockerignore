@@ -1,0 +1,9 @@
+bin/
+obj/
+Tests/
+*.swp
+*.swo
+*~
+.git/
+.vs/
+.vscode/
