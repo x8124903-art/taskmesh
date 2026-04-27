@@ -1,4 +1,5 @@
 @page "/projects/{id:int}"
+@page "/projects/{id:int}/{tab}"
 @inject WebApp.Services.ProjectApiService ProjectService
 @inject WebApp.Services.AuthService AuthService
 @inject NavigationManager Navigation
@@ -19,7 +20,7 @@ else
     
     <MudText Typo="Typo.h4" Class="mb-4">@project.Name</MudText>
 
-    <MudTabs Elevation="2" Rounded="true" @bind-ActivePanelIndex="activeTab">
+    <MudTabs Elevation="2" Rounded="true" ActivePanelIndex="@activeTab" ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="Información" Icon="@Icons.Material.Filled.Info">
             <MudPaper Class="pa-4 mt-4" Elevation="3">
                 <MudStack Spacing="4">
@@ -87,31 +88,26 @@ else
         </MudTabPanel>
         
         <MudTabPanel Text="Backlog" Icon="@Icons.Material.Filled.List">
-            <MudPaper Class="pa-4 mt-4" Elevation="3">
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                    El backlog del proyecto estará disponible en una próxima fase.
-                </MudAlert>
-            </MudPaper>
+            <ProjectBacklog ProjectId="@Id" Members="@members" UserRole="@currentUserRole" />
         </MudTabPanel>
         
         <MudTabPanel Text="Tablero" Icon="@Icons.Material.Filled.ViewKanban">
-            <MudPaper Class="pa-4 mt-4" Elevation="3">
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                    El tablero Kanban del proyecto estará disponible en una próxima fase.
-                </MudAlert>
-            </MudPaper>
+            <ProjectBoard ProjectId="@Id" Members="@members" UserRole="@currentUserRole" />
         </MudTabPanel>
         
         <MudTabPanel Text="Miembros" Icon="@Icons.Material.Filled.People">
             <MudPaper Class="pa-4 mt-4">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-4">
                     <MudText Typo="Typo.h6">Miembros del Proyecto</MudText>
-                    <MudButton Variant="Variant.Filled" 
-                               Color="Color.Primary" 
-                               StartIcon="@Icons.Material.Filled.PersonAdd"
-                               OnClick="OpenInviteDialog">
-                        Invitar Miembro
-                    </MudButton>
+                    @if (canManageMembers)
+                    {
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Primary" 
+                                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                                   OnClick="OpenInviteDialog">
+                            Invitar Miembro
+                        </MudButton>
+                    }
                 </MudStack>
                 
                 @if (loadingMembers)
@@ -219,6 +215,9 @@ else
 
 @code {
     [Parameter] public int Id { get; set; }
+    [Parameter] public string? Tab { get; set; }
+
+    private static readonly string[] TabNames = { "info", "backlog", "tablero", "miembros", "configuracion" };
 
     private WebApp.Models.Projects.Project? project;
     private List<WebApp.Models.Projects.ProjectMember> members = new();
@@ -228,18 +227,35 @@ else
     private int activeTab = 0;
     private bool canEdit = false;
     private bool canManageMembers = false;
+    private string currentUserRole = string.Empty;
     private EditProjectModel editModel = new();
     private List<BreadcrumbItem> breadcrumbs = new();
 
     protected override async Task OnInitializedAsync()
     {
+        await AuthService.EnsureInitializedAsync();
         if (!AuthService.IsAuthenticated)
         {
             Navigation.NavigateTo("/login");
             return;
         }
-        
+
+        activeTab = TabNameToIndex(Tab);
         await LoadProjectAsync();
+    }
+
+    private void OnTabChanged(int index)
+    {
+        activeTab = index;
+        var tabName = index >= 0 && index < TabNames.Length ? TabNames[index] : TabNames[0];
+        Navigation.NavigateTo($"/projects/{Id}/{tabName}", replace: true);
+    }
+
+    private static int TabNameToIndex(string? tab)
+    {
+        if (string.IsNullOrEmpty(tab)) return 0;
+        var idx = Array.FindIndex(TabNames, t => t.Equals(tab, StringComparison.OrdinalIgnoreCase));
+        return idx >= 0 ? idx : 0;
     }
 
     private async Task LoadProjectAsync()
@@ -282,7 +298,8 @@ else
                 var currentUserMember = members.FirstOrDefault(m => m.UserId == currentUserId.Value);
                 if (currentUserMember != null)
                 {
-                    canEdit = currentUserMember.RoleName == "Owner" || currentUserMember.RoleName == "Admin";
+                    currentUserRole = currentUserMember.RoleName;
+                    canEdit = currentUserRole == "Owner" || currentUserRole == "Admin";
                     canManageMembers = canEdit;
                 }
             }

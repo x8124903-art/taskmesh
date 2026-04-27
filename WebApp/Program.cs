@@ -32,5 +32,6 @@ builder.Services.AddScoped<IAuthService>(sp => sp.GetRequiredService<AuthService
 builder.Services.AddScoped<ProjectApiService>();
 builder.Services.AddScoped<ProjectInvitationApiService>();
 builder.Services.AddScoped<ProjectStateService>();
+builder.Services.AddScoped<TaskApiService>();
 
 await builder.Build().RunAsync();

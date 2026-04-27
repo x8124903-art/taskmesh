@@ -51,8 +51,9 @@
     private bool isSubmitting = false;
     private string errorMessage = string.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await AuthService.EnsureInitializedAsync();
         if (AuthService.IsAuthenticated)
         {
             Navigation.NavigateTo("/projects");

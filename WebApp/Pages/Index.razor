@@ -3,8 +3,9 @@
 @inject NavigationManager Navigation
 
 @code {
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        await AuthService.EnsureInitializedAsync();
         if (AuthService.IsAuthenticated)
         {
             Navigation.NavigateTo("/projects");

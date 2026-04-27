@@ -1,0 +1,63 @@
+@inject ISnackbar Snackbar
+
+<MudCard Class="mb-2 cursor-pointer" Style="transition: all 0.2s; hover: transform: scale(1.02);" @onclick="HandleClick">
+    <MudCardContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">
+            @Task.Title
+        </MudText>
+        
+        <MudStack Row="true" Spacing="1" Class="mt-2">
+            <MudChip Size="Size.Small" Color="@GetPriorityColor(Task.Priority)" Variant="Variant.Filled">
+                @GetPriorityText(Task.Priority)
+            </MudChip>
+        </MudStack>
+        
+        @if (Task.AssignedToUserId.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                @GetAssignedToName()
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" />
+                Sin asignar
+            </MudText>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public TaskModel Task { get; set; } = new();
+    [Parameter] public EventCallback<TaskModel> OnClick { get; set; }
+    [Parameter] public List<WebApp.Models.Projects.ProjectMember> Members { get; set; } = new();
+
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync(Task);
+    }
+
+    private Color GetPriorityColor(string priority) => priority switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Success,
+        _ => Color.Default
+    };
+
+    private string GetPriorityText(string priority) => priority switch
+    {
+        "High" => "Alta",
+        "Medium" => "Media",
+        "Low" => "Baja",
+        _ => priority
+    };
+
+    private string GetAssignedToName()
+    {
+        var member = Members.FirstOrDefault(m => m.UserId == Task.AssignedToUserId);
+        return member?.UserName ?? $"Usuario #{Task.AssignedToUserId}";
+    }
+}

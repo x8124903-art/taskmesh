@@ -1,0 +1,220 @@
+@inject TaskApiService TaskService
+@inject ProjectApiService ProjectService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudSelect T="int?" 
+                       Value="assignedToFilter"
+                       ValueChanged="@((int? v) => { assignedToFilter = v; ApplyFilters(); })"
+                       Label="Asignado a" 
+                       Variant="Variant.Outlined"
+                       Clearable="true"
+                       OnClearButtonClick="@(() => { assignedToFilter = null; ApplyFilters(); })">
+                <MudSelectItem Value="@((int?)null)">Todos</MudSelectItem>
+                @foreach (var member in projectMembers)
+                {
+                    <MudSelectItem Value="@((int?)member.UserId)">@member.UserName</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="string" 
+                       Value="priorityFilter"
+                       ValueChanged="@((string v) => { priorityFilter = v; ApplyFilters(); })"
+                       Label="Prioridad" 
+                       Variant="Variant.Outlined"
+                       Clearable="true"
+                       OnClearButtonClick="@(() => { priorityFilter = null; ApplyFilters(); })">
+                <MudSelectItem Value="@((string?)null)">Todas</MudSelectItem>
+                <MudSelectItem Value="@("High")">Alta</MudSelectItem>
+                <MudSelectItem Value="@("Medium")">Media</MudSelectItem>
+                <MudSelectItem Value="@("Low")">Baja</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="searchText" 
+                          Label="Buscar" 
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" 
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyUp="@((e) => { if (e.Key == "Enter") ApplyFilters(); })"
+                          Clearable="true"
+                          OnClearButtonClick="@(() => { searchText = null; ApplyFilters(); })" />
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var column in columns)
+        {
+            <MudItem xs="12" md="2">
+                <BoardColumn Title="@column.Title"
+                             Status="@column.Status"
+                             Tasks="@GetTasksForColumn(column.Status)"
+                             OnTaskClick="@OpenTaskDetail"
+                             OnStatusChange="@HandleStatusChange"
+                             UserRole="@UserRole"
+                             Members="@projectMembers" />
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public List<WebApp.Models.Projects.ProjectMember> Members { get; set; } = new();
+    [Parameter] public string UserRole { get; set; } = string.Empty;
+
+    private bool loading = true;
+    private BoardResponse? boardData;
+    private List<TaskModel> allTasks = new();
+    private Dictionary<string, List<TaskModel>> filteredBoard = new();
+    private List<WebApp.Models.Projects.ProjectMember> projectMembers = new();
+
+    private int? assignedToFilter;
+    private string? priorityFilter;
+    private string? searchText;
+
+    private List<BoardColumnDefinition> columns = new()
+    {
+        new() { Status = "Todo", Title = "PENDIENTE" },
+        new() { Status = "InProgress", Title = "EN PROGRESO" },
+        new() { Status = "Review", Title = "REVISIÓN" },
+        new() { Status = "Testing", Title = "PRUEBAS" },
+        new() { Status = "Done", Title = "COMPLETADA" },
+        new() { Status = "Blocked", Title = "BLOQUEADA" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBoardAsync();
+        await LoadProjectMembersAsync();
+    }
+
+    private async Task LoadBoardAsync()
+    {
+        loading = true;
+        try
+        {
+            boardData = await TaskService.GetBoardAsync(ProjectId);
+            if (boardData != null)
+            {
+                allTasks = boardData.Columns.Values.SelectMany(t => t).ToList();
+                ApplyFilters();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar el tablero: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadProjectMembersAsync()
+    {
+        try
+        {
+            projectMembers = await ProjectService.GetMembersAsync(ProjectId);
+        }
+        catch
+        {
+            projectMembers = new List<WebApp.Models.Projects.ProjectMember>();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = allTasks.AsEnumerable();
+
+        if (assignedToFilter.HasValue)
+        {
+            filtered = filtered.Where(t => t.AssignedToUserId == assignedToFilter.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(priorityFilter))
+        {
+            filtered = filtered.Where(t => t.Priority == priorityFilter);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            filtered = filtered.Where(t =>
+                t.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                (t.Description != null && t.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        filteredBoard = filtered.GroupBy(t => t.Status)
+                                .ToDictionary(g => g.Key, g => g.ToList());
+
+        StateHasChanged();
+    }
+
+    private List<TaskModel> GetTasksForColumn(string status)
+    {
+        return filteredBoard.TryGetValue(status, out var tasks) ? tasks : new List<TaskModel>();
+    }
+
+    private async Task HandleStatusChange((int taskId, string newStatus) changeRequest)
+    {
+        try
+        {
+            var success = await TaskService.ChangeStatusAsync(changeRequest.taskId, changeRequest.newStatus);
+            if (success)
+            {
+                Snackbar.Add("Estado de la tarea actualizado correctamente", Severity.Success);
+                await LoadBoardAsync();
+            }
+            else
+            {
+                Snackbar.Add("Error al actualizar el estado de la tarea", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OpenTaskDetail(TaskModel task)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Task"] = task,
+            ["Members"] = projectMembers,
+            ["UserRole"] = UserRole
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TaskDetailDialog>($"#{task.IdTask} - {task.Title}", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadBoardAsync();
+        }
+    }
+
+    private class BoardColumnDefinition
+    {
+        public string Status { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+    }
+}

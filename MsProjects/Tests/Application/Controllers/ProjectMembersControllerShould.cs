@@ -19,12 +19,13 @@ public sealed class ProjectMembersControllerShould
     private readonly Mock<IGetProjectMembersUseCase> _getMembersMock = new();
     private readonly Mock<IChangeProjectMemberRoleUseCase> _changeRoleMock = new();
     private readonly Mock<IRemoveProjectMemberUseCase> _removeMemberMock = new();
+    private readonly Mock<IGetProjectMemberRoleUseCase> _getRoleMock = new();
     private readonly ProjectMembersController _controller;
 
     public ProjectMembersControllerShould()
     {
         _controller = new ProjectMembersController(
-            _getMembersMock.Object, _changeRoleMock.Object, _removeMemberMock.Object);
+            _getMembersMock.Object, _changeRoleMock.Object, _removeMemberMock.Object, _getRoleMock.Object);
         
         _controller.ControllerContext = new ControllerContext
         {
