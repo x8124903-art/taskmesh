@@ -70,7 +70,6 @@ public sealed class TaskCommentSqlRepositoryShould
         comments.Should().NotBeEmpty();
         comments.Should().OnlyContain(c => c.TaskId == TASK_ID);
 
-        // Verify ordering (most recent first)
         var orderedComments = comments.OrderByDescending(c => c.CreatedAt).ToList();
         comments.Should().BeEquivalentTo(orderedComments, options => options.WithStrictOrdering());
     }
@@ -79,7 +78,7 @@ public sealed class TaskCommentSqlRepositoryShould
     public async Task GetByTaskIdAsync_ReturnsEmptyList_WhenTaskHasNoComments()
     {
         // Arrange
-        const int TASK_ID = 4; // Task with no comments per test data
+        const int TASK_ID = 4;
 
         // Act
         var comments = await _repository.GetByTaskIdAsync(TASK_ID, CancellationToken.None);
@@ -92,7 +91,7 @@ public sealed class TaskCommentSqlRepositoryShould
     public async Task GetByTaskIdAsync_ReturnsMultipleComments_WhenTaskHasMany()
     {
         // Arrange
-        const int TASK_ID = 6; // Task 6 has multiple comments per test data
+        const int TASK_ID = 6;
 
         // Act
         var comments = await _repository.GetByTaskIdAsync(TASK_ID, CancellationToken.None);
@@ -124,7 +123,7 @@ public sealed class TaskCommentSqlRepositoryShould
     [Fact]
     public async Task GetByTaskIdAsync_ReturnsCorrectUserId()
     {
-        // Arrange - Create comment with specific user
+        // Arrange
         const int TASK_ID = 11;
         const int USER_ID = 20;
         const string COMMENT_TEXT = "Comment by user 20";

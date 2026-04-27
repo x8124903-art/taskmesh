@@ -6,12 +6,48 @@ using MsAuth.Domain.Services;
 using MsAuth.Infrastructure.Data;
 using MsAuth.Infrastructure.Repositories;
 using MsAuth.Infrastructure.Options;
+using MsAuth.Infrastructure.EventBus;
 
 using MsAuth.Application.UseCases.Auth;
 
+using MassTransit;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// OpenTelemetry
+var otlpEndpoint = builder.Configuration["Observability:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MsAuth"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint));
+        }
+    })
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter());
 
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
 builder.Services.AddSingleton<IDapperContext, DapperContext>();
@@ -34,6 +70,19 @@ builder.Services.AddSingleton<IJwtService>(_ => new JwtService(
     int.Parse(jwtSection["AccessTokenExpirationMinutes"] ?? "15")
 ));
 
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var connectionString = builder.Configuration["EventBus:ConnectionString"] 
+            ?? throw new InvalidOperationException("EventBus:ConnectionString not configured");
+        cfg.Host(new Uri(connectionString));
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+builder.Services.AddScoped<IEventBus, RabbitMqEventBus>();
+
 builder.Services.AddExceptionHandler<MsAuth.Infrastructure.GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -55,6 +104,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "Healthy", service = "MsAuth" }));
+app.MapPrometheusScrapingEndpoint();
 
 app.UseExceptionHandler();
 app.UseCors("AllowWebApp");

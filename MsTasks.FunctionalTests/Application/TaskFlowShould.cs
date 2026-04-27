@@ -40,7 +40,7 @@ public sealed class TaskFlowShould(ServerFixture fixture)
         var taskId = createdTask.IdTask;
         
         _client.DefaultRequestHeaders.Remove("X-User-Id");
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20");
         
         var statusRequest = new { status = "InProgress" };
         var statusResponse = await _client.PatchAsJsonAsync($"/tasks/{taskId}/status", statusRequest);

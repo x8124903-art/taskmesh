@@ -1,4 +1,6 @@
 using MsAuth.Application.Models;
+using MsAuth.Domain.Events;
+using MsAuth.Infrastructure.EventBus;
 
 namespace MsAuth.Domain.Services
 {
@@ -6,11 +8,19 @@ namespace MsAuth.Domain.Services
     {
         private readonly MsAuth.Infrastructure.Repositories.IUserRepository _repository;
         private readonly IPasswordHasher _hasher;
+        private readonly IEventBus _eventBus;
+        private readonly ILogger<UserService> _logger;
 
-        public UserService(MsAuth.Infrastructure.Repositories.IUserRepository repository, IPasswordHasher hasher)
+        public UserService(
+            MsAuth.Infrastructure.Repositories.IUserRepository repository, 
+            IPasswordHasher hasher,
+            IEventBus eventBus,
+            ILogger<UserService> logger)
         {
             _repository = repository;
             _hasher = hasher;
+            _eventBus = eventBus;
+            _logger = logger;
         }
 
         public Task<UserModel?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
@@ -33,6 +43,23 @@ namespace MsAuth.Domain.Services
             
             var hash = _hasher.HashPassword(request.Password);
             var user = await _repository.AddAsync(request.Email, request.Name, hash, cancellationToken);
+
+            try
+            {
+                var evt = new UserRegisteredEvent(
+                    EventId: Guid.NewGuid().ToString(),
+                    OccurredAt: DateTime.UtcNow,
+                    UserId: user.IdUser,
+                    Email: user.Email,
+                    Name: user.Name
+                );
+                await _eventBus.PublishAsync(evt, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish UserRegisteredEvent for user {UserId}", user.IdUser);
+            }
+
             return user;
         }
 

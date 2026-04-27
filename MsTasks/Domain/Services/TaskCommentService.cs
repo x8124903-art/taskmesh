@@ -1,5 +1,7 @@
 using MsTasks.Application.Models;
+using MsTasks.Domain.Events;
 using MsTasks.Domain.Exceptions;
+using MsTasks.Infrastructure.EventBus;
 using MsTasks.Infrastructure.HttpClients;
 using MsTasks.Infrastructure.Repositories;
 
@@ -9,6 +11,7 @@ public sealed class TaskCommentService(
     ITaskRepository taskRepository,
     ITaskCommentRepository taskCommentRepository,
     IProjectHttpClient projectHttpClient,
+    IEventBus eventBus,
     ILogger<TaskCommentService> logger) : ITaskCommentService
 {
     private static readonly string[] AllowedRolesForCreation = ["Owner", "Admin", "Member"];
@@ -36,6 +39,26 @@ public sealed class TaskCommentService(
         var comment = await taskCommentRepository.CreateAsync(taskId, currentUserId, request.Comment, cancellationToken);
         logger.LogInformation("Comment {CommentId} added to task {TaskId} by user {UserId}", 
             comment.IdTaskComment, taskId, currentUserId);
+
+        try
+        {
+            var evt = new TaskCommentAddedEvent(
+                EventId: Guid.NewGuid().ToString(),
+                OccurredAt: DateTime.UtcNow,
+                TaskId: taskId,
+                ProjectId: task.ProjectId,
+                CommentId: comment.IdTaskComment,
+                AuthorUserId: currentUserId,
+                TaskTitle: task.Title,
+                TaskCreatedByUserId: task.CreatedBy,
+                TaskAssignedToUserId: task.AssignedToUserId
+            );
+            await eventBus.PublishAsync(evt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish TaskCommentAddedEvent for task {TaskId}", taskId);
+        }
 
         return comment;
     }

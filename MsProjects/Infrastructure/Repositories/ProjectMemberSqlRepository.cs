@@ -112,6 +112,16 @@ public sealed class ProjectMemberSqlRepository : IProjectMemberRepository
         return count > 0;
     }
 
+    public async Task<int?> GetUserIdByEmailAsync(string email, CancellationToken cancellationToken = default)
+    {
+        using var connection = _context.CreateConnection();
+        return await _context.QueryFirstOrDefaultAsync<int?>(
+            connection,
+            QueriesMySql.GetUserIdByEmail,
+            new { Email = email },
+            cancellationToken);
+    }
+
     public async Task AddMemberAsync(int projectId, int userId, string role, CancellationToken cancellationToken = default, string? userName = null, string? email = null)
     {
         using var connection = _context.CreateConnection();

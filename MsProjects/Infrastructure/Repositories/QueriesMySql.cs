@@ -128,6 +128,12 @@ namespace MsProjects.Infrastructure.Repositories
             FROM ProjectMember 
             WHERE ProjectId = @ProjectId AND Email = @Email AND JoinedAt IS NOT NULL;";
 
+        internal const string GetUserIdByEmail = @"
+            SELECT UserId 
+            FROM ProjectMember 
+            WHERE Email = @Email AND JoinedAt IS NOT NULL
+            LIMIT 1;";
+
         internal const string AddMember = @"
             INSERT INTO ProjectMember (ProjectId, UserId, Role, UserName, Email, InvitedAt, JoinedAt)
             VALUES (@ProjectId, @UserId, @Role, @UserName, @Email, @InvitedAt, @JoinedAt);

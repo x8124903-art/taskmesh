@@ -5,5 +5,6 @@ public sealed record TaskCreatedEvent(
     DateTime OccurredAt,
     int TaskId,
     int ProjectId,
-    int CreatedBy
+    int CreatedBy,
+    string TaskTitle
 );

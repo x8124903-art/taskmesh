@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Moq;
 using MsTasks.Application.Models;
 using MsTasks.Domain;
 using MsTasks.Domain.Exceptions;
 using MsTasks.Domain.Services;
+using MsTasks.Infrastructure.EventBus;
 using MsTasks.Infrastructure.HttpClients;
 using MsTasks.Infrastructure.Repositories;
 
@@ -14,6 +16,8 @@ public sealed class TaskServiceShould
 {
     private readonly Mock<ITaskRepository> _taskRepositoryMock;
     private readonly Mock<IProjectHttpClient> _projectHttpClientMock;
+    private readonly Mock<IEventBus> _eventBusMock;
+    private readonly Mock<IDistributedCache> _cacheMock;
     private readonly Mock<ILogger<TaskService>> _loggerMock;
     private readonly TaskService _service;
 
@@ -21,8 +25,10 @@ public sealed class TaskServiceShould
     {
         _taskRepositoryMock = new Mock<ITaskRepository>();
         _projectHttpClientMock = new Mock<IProjectHttpClient>();
+        _eventBusMock = new Mock<IEventBus>();
+        _cacheMock = new Mock<IDistributedCache>();
         _loggerMock = new Mock<ILogger<TaskService>>();
-        _service = new TaskService(_taskRepositoryMock.Object, _projectHttpClientMock.Object, _loggerMock.Object);
+        _service = new TaskService(_taskRepositoryMock.Object, _projectHttpClientMock.Object, _eventBusMock.Object, _cacheMock.Object, _loggerMock.Object);
     }
 
     [Fact]
@@ -50,6 +56,62 @@ public sealed class TaskServiceShould
         result.Title.Should().Be("Test Task");
         result.Status.Should().Be(TaskStatus.Todo);
         _taskRepositoryMock.Verify(x => x.CreateAsync(It.IsAny<TaskModel>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CreateAsync_PublishesTaskAssignedEvent_WhenCreatedWithInitialAssignment()
+    {
+        // Arrange
+        const int GIVEN_PROJECT_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        const int GIVEN_ASSIGNED_USER_ID = 20;
+        var request = new AddTaskRequest("Test Task", "Description", GIVEN_PROJECT_ID, GIVEN_ASSIGNED_USER_ID, TaskPriority.High, null);
+
+        _projectHttpClientMock
+            .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Member");
+
+        var expectedTask = new TaskModel(1, "Test Task", "Description", GIVEN_PROJECT_ID, GIVEN_ASSIGNED_USER_ID, TaskPriority.High, TaskStatus.Todo, null, GIVEN_USER_ID, 0, DateTime.UtcNow, DateTime.UtcNow);
+        _taskRepositoryMock
+            .Setup(x => x.CreateAsync(It.IsAny<TaskModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedTask);
+
+        // Act
+        await _service.CreateAsync(request, GIVEN_USER_ID, CancellationToken.None);
+
+        _eventBusMock.Verify(x => x.PublishAsync(
+            It.IsAny<MsTasks.Domain.Events.TaskCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _eventBusMock.Verify(x => x.PublishAsync(
+            It.Is<MsTasks.Domain.Events.TaskAssignedEvent>(e =>
+                e.AssignedToUserId == GIVEN_ASSIGNED_USER_ID &&
+                e.AssignedByUserId == GIVEN_USER_ID),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CreateAsync_SkipsTaskAssignedEvent_WhenSelfAssignment()
+    {
+        // Arrange
+        const int GIVEN_PROJECT_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        var request = new AddTaskRequest("Test Task", "Description", GIVEN_PROJECT_ID, GIVEN_USER_ID, TaskPriority.High, null);
+
+        _projectHttpClientMock
+            .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Member");
+
+        var expectedTask = new TaskModel(1, "Test Task", "Description", GIVEN_PROJECT_ID, GIVEN_USER_ID, TaskPriority.High, TaskStatus.Todo, null, GIVEN_USER_ID, 0, DateTime.UtcNow, DateTime.UtcNow);
+        _taskRepositoryMock
+            .Setup(x => x.CreateAsync(It.IsAny<TaskModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedTask);
+
+        // Act
+        await _service.CreateAsync(request, GIVEN_USER_ID, CancellationToken.None);
+
+        _eventBusMock.Verify(x => x.PublishAsync(
+            It.IsAny<MsTasks.Domain.Events.TaskCreatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        _eventBusMock.Verify(x => x.PublishAsync(
+            It.IsAny<MsTasks.Domain.Events.TaskAssignedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -82,7 +144,7 @@ public sealed class TaskServiceShould
 
         _projectHttpClientMock
             .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string?)null); // Not a member
+            .ReturnsAsync((string?)null);
 
         // Act
         Func<System.Threading.Tasks.Task> act = async () => await _service.CreateAsync(request, GIVEN_USER_ID, CancellationToken.None);
@@ -133,7 +195,7 @@ public sealed class TaskServiceShould
         const int GIVEN_USER_ID = 10;
         const int GIVEN_PROJECT_ID = 5;
         var existingTask = new TaskModel(GIVEN_TASK_ID, "Title", null, GIVEN_PROJECT_ID, null, TaskPriority.Medium, TaskStatus.Todo, null, GIVEN_USER_ID, 5, DateTime.UtcNow, DateTime.UtcNow);
-        var request = new UpdateTaskRequest("New Title", null, null, TaskPriority.High, null, 4); // Old RowVersion
+        var request = new UpdateTaskRequest("New Title", null, null, TaskPriority.High, null, 4);
 
         _taskRepositoryMock
             .Setup(x => x.GetByIdAsync(GIVEN_TASK_ID, It.IsAny<CancellationToken>()))
@@ -145,13 +207,57 @@ public sealed class TaskServiceShould
 
         _taskRepositoryMock
             .Setup(x => x.UpdateAsync(It.IsAny<TaskModel>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(0); // No rows affected = conflict
+            .ReturnsAsync(0); 
 
         // Act
         Func<System.Threading.Tasks.Task> act = async () => await _service.UpdateAsync(GIVEN_TASK_ID, request, GIVEN_USER_ID, CancellationToken.None);
 
         // Assert
         await act.Should().ThrowAsync<ConcurrencyException>();
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task UpdateAsync_PublishesTaskAssignedEvent_WhenAssignmentChanges()
+    {
+        // Arrange
+        const int GIVEN_TASK_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        const int GIVEN_PROJECT_ID = 5;
+        const int NEW_ASSIGNED_USER_ID = 20;
+        var existingTask = new TaskModel(GIVEN_TASK_ID, "Title", null, GIVEN_PROJECT_ID, null, TaskPriority.Medium, TaskStatus.Todo, null, 99, 0, DateTime.UtcNow, DateTime.UtcNow);
+        var request = new UpdateTaskRequest("Title", null, NEW_ASSIGNED_USER_ID, TaskPriority.Medium, null, 0);
+
+        _taskRepositoryMock
+            .Setup(x => x.GetByIdAsync(GIVEN_TASK_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingTask);
+
+        _projectHttpClientMock
+            .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Owner");
+
+        _projectHttpClientMock
+            .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, NEW_ASSIGNED_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Member");
+
+        _taskRepositoryMock
+            .Setup(x => x.UpdateAsync(It.IsAny<TaskModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var updatedTask = new TaskModel(GIVEN_TASK_ID, "Title", null, GIVEN_PROJECT_ID, NEW_ASSIGNED_USER_ID, TaskPriority.Medium, TaskStatus.Todo, null, 99, 1, DateTime.UtcNow, DateTime.UtcNow);
+        _taskRepositoryMock
+            .SetupSequence(x => x.GetByIdAsync(GIVEN_TASK_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existingTask)
+            .ReturnsAsync(updatedTask);
+
+        // Act
+        await _service.UpdateAsync(GIVEN_TASK_ID, request, GIVEN_USER_ID, CancellationToken.None);
+
+        // Assert
+        _eventBusMock.Verify(x => x.PublishAsync(
+            It.Is<MsTasks.Domain.Events.TaskAssignedEvent>(e =>
+                e.AssignedToUserId == NEW_ASSIGNED_USER_ID &&
+                e.AssignedByUserId == GIVEN_USER_ID),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -229,7 +335,7 @@ public sealed class TaskServiceShould
 
         _projectHttpClientMock
             .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, ASSIGNED_USER_ID, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Member"); // Valid member
+            .ReturnsAsync("Member");
 
         _taskRepositoryMock
             .Setup(x => x.UpdateAssignmentAsync(GIVEN_TASK_ID, ASSIGNED_USER_ID, It.IsAny<CancellationToken>()))
@@ -309,7 +415,7 @@ public sealed class TaskServiceShould
 
         // Assert
         result.Should().NotBeNull();
-        result.Columns.Should().HaveCount(6); // All 6 statuses
+        result.Columns.Should().HaveCount(6);
         result.Columns["Todo"].Should().HaveCount(1);
         result.Columns["InProgress"].Should().HaveCount(1);
         result.Columns["Done"].Should().HaveCount(1);

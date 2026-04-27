@@ -55,7 +55,6 @@ public sealed class TaskSqlRepositoryShould
         createdTask.AssignedToUserId.Should().Be(20);
         createdTask.RowVersion.Should().Be(1);
 
-        // Verify in database
         await using var connection = new MySqlConnection(_connectionString);
         var dbTask = await connection.QueryFirstOrDefaultAsync(
             "SELECT Title FROM Task WHERE IdTask = @Id",
@@ -69,7 +68,6 @@ public sealed class TaskSqlRepositoryShould
     [Fact]
     public async Task GetByIdAsync_ReturnsTask_WhenTaskExists()
     {
-        // Use task 6 which is not mutated by other tests (task 1 is modified by controller integration tests)
         // Act
         var task = await _repository.GetByIdAsync(6, CancellationToken.None);
 
@@ -93,7 +91,7 @@ public sealed class TaskSqlRepositoryShould
     [Fact]
     public async Task GetByIdAsync_ReturnsNull_WhenTaskIsDeleted()
     {
-        // Arrange - Mark task as deleted
+        // Arrange 
         await using var connection = new MySqlConnection(_connectionString);
         await connection.ExecuteAsync(
             "UPDATE Task SET IsDeleted = 1 WHERE IdTask = @Id",
@@ -220,7 +218,6 @@ public sealed class TaskSqlRepositoryShould
         // Assert
         rowsAffected.Should().Be(0);
 
-        // Verify no update occurred
         var reloadedTask = await _repository.GetByIdAsync(4, CancellationToken.None);
         reloadedTask!.Title.Should().NotBe("Updated with wrong version");
     }
@@ -234,11 +231,9 @@ public sealed class TaskSqlRepositoryShould
         // Act
         await _repository.SoftDeleteAsync(TASK_ID, CancellationToken.None);
 
-        // Assert - GetByIdAsync should return null (excludes deleted)
         var task = await _repository.GetByIdAsync(TASK_ID, CancellationToken.None);
         task.Should().BeNull();
 
-        // Verify IsDeleted flag in database
         await using var connection = new MySqlConnection(_connectionString);
         var isDeleted = await connection.ExecuteScalarAsync<bool>(
             "SELECT IsDeleted FROM Task WHERE IdTask = @Id",

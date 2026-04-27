@@ -1,7 +1,11 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using MsTasks.Infrastructure.EventBus;
 using Testcontainers.MySql;
 using Testcontainers.Redis;
 using WireMock.Server;
@@ -61,13 +65,22 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
         {
             new("Database:DefaultConnection", _mySqlContainer!.GetConnectionString()),
             new("RedisCache:ConnectionString", _redisContainer!.GetConnectionString()),
-            new("MsProjects:BaseUrl", _wireMockServer!.Url!)
+            new("MsProjects:BaseUrl", _wireMockServer!.Url!),
+            new("EventBus:ConnectionString", "amqp://guest:guest@localhost:5672"),
+            new("Observability:OtlpEndpoint", "")
         };
         builder
             .UseEnvironment("Test")
             .ConfigureAppConfiguration(c => c
                 .AddJsonFile(settingsFile, true)
-                .AddInMemoryCollection(entries!));
+                .AddInMemoryCollection(entries!))
+            .ConfigureTestServices(services =>
+            {
+                var eventBusMock = new Mock<IEventBus>();
+                eventBusMock.Setup(x => x.PublishAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+                services.AddSingleton(eventBusMock.Object);
+            });
     }
     
     private async Task GenerateMySql()
@@ -98,8 +111,6 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
     {
         _wireMockServer = WireMockServer.Start();
         
-        // Default mocks for role endpoints
-        // User 10 = Owner of project 1
         _wireMockServer
             .Given(Request.Create()
                 .WithPath("/projects/1/members/10/role")
@@ -109,7 +120,6 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
                 .WithHeader("Content-Type", "application/json")
                 .WithBody("{\"role\":\"Owner\"}"));
         
-        // User 20 = Member of project 1
         _wireMockServer
             .Given(Request.Create()
                 .WithPath("/projects/1/members/20/role")
@@ -119,7 +129,6 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
                 .WithHeader("Content-Type", "application/json")
                 .WithBody("{\"role\":\"Member\"}"));
         
-        // User 30 = Viewer of project 1
         _wireMockServer
             .Given(Request.Create()
                 .WithPath("/projects/1/members/30/role")
@@ -129,7 +138,6 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
                 .WithHeader("Content-Type", "application/json")
                 .WithBody("{\"role\":\"Viewer\"}"));
         
-        // User 99 = NOT a member of project 1
         _wireMockServer
             .Given(Request.Create()
                 .WithPath("/projects/1/members/99/role")

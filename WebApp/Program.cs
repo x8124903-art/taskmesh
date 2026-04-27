@@ -33,5 +33,6 @@ builder.Services.AddScoped<ProjectApiService>();
 builder.Services.AddScoped<ProjectInvitationApiService>();
 builder.Services.AddScoped<ProjectStateService>();
 builder.Services.AddScoped<TaskApiService>();
+builder.Services.AddScoped<INotificationApiService, NotificationApiService>();
 
 await builder.Build().RunAsync();

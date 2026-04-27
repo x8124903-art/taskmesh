@@ -105,7 +105,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Pre-populate form with existing task data
         model.Title = Task.Title;
         model.Description = Task.Description;
         model.Priority = Task.Priority;
@@ -119,7 +118,6 @@
         }
         catch (Exception)
         {
-            // Ignore errors loading members
         }
     }
 

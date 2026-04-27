@@ -20,6 +20,6 @@ public sealed class RemoveProjectMemberUseCase : IRemoveProjectMemberUseCase
             ProjectRoles.Owner, ProjectRoles.Admin))
             throw new UnauthorizedAccessException("User does not have permission to remove members from this project.");
 
-        await _memberService.RemoveMemberAsync(projectId, targetUserId, cancellationToken);
+        await _memberService.RemoveMemberAsync(projectId, targetUserId, currentUserId, cancellationToken);
     }
 }

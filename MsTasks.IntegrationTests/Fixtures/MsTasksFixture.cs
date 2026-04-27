@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using MySqlConnector;
 using Testcontainers.MySql;
 using Testcontainers.Redis;
@@ -77,12 +78,18 @@ public sealed class MsTasksFixture : WebApplicationFactory<Program>, IAsyncLifet
                 ["Database:DefaultConnection"] = ConnectionString,
                 ["RedisCache:ConnectionString"] = _redisContainer.GetConnectionString(),
                 ["RedisCache:Enabled"] = "true",
-                ["MsProjects:BaseUrl"] = _wireMockServer?.Urls[0] ?? "http://localhost:5001"
+                ["Observability:OtlpEndpoint"] = "",
+                ["MsProjects:BaseUrl"] = _wireMockServer?.Urls[0] ?? "http://localhost:5001",
+                ["EventBus:ConnectionString"] = "amqp://guest:guest@localhost:5672"
             });
         });
 
         builder.ConfigureTestServices(services =>
         {
+            var eventBusMock = new Mock<MsTasks.Infrastructure.EventBus.IEventBus>();
+            eventBusMock.Setup(x => x.PublishAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+            services.AddSingleton(eventBusMock.Object);
         });
     }
 

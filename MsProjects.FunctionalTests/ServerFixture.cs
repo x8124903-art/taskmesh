@@ -1,7 +1,12 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using MsProjects.Infrastructure.EventBus;
+using MsProjects.Infrastructure.HttpClients;
 using Testcontainers.MySql;
 using Testcontainers.Redis;
 
@@ -50,13 +55,28 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
         var entries = new List<KeyValuePair<string, string?>>
         {
             new("Database:DefaultConnection", _mySqlContainer!.GetConnectionString()),
-            new("RedisCache:ConnectionString", _redisContainer!.GetConnectionString())
+            new("RedisCache:ConnectionString", _redisContainer!.GetConnectionString()),
+            new("EventBus:ConnectionString", "amqp://guest:guest@localhost:5672"),
+            new("MsAuth:BaseUrl", "http://localhost:44310"),
+            new("Observability:OtlpEndpoint", "")
         };
         builder
             .UseEnvironment("Test")
             .ConfigureAppConfiguration(c => c
                 .AddJsonFile(settingsFile, true)
-                .AddInMemoryCollection(entries!));
+                .AddInMemoryCollection(entries!))
+            .ConfigureTestServices(services =>
+            {
+                var eventBusMock = new Mock<IEventBus>();
+                eventBusMock.Setup(x => x.PublishAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+                services.AddSingleton(eventBusMock.Object);
+
+                var authHttpClientMock = new Mock<IAuthHttpClient>();
+                authHttpClientMock.Setup(x => x.GetUserIdByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync((int?)null);
+                services.AddSingleton(authHttpClientMock.Object);
+            });
     }
     
     private async Task GenerateMySql()

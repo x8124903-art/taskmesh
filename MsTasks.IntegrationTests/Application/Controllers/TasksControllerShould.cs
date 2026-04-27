@@ -63,7 +63,7 @@ public sealed class TasksControllerShould
             DueDate: null);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "30"); // Viewer
+        _client.DefaultRequestHeaders.Add("X-User-Id", "30");
 
         // Act
         var response = await _client.PostAsJsonAsync("/tasks", request);
@@ -85,7 +85,7 @@ public sealed class TasksControllerShould
             DueDate: null);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "99"); // Not a member (404 from mock)
+        _client.DefaultRequestHeaders.Add("X-User-Id", "99");
 
         // Act
         var response = await _client.PostAsJsonAsync("/tasks", request);
@@ -99,7 +99,7 @@ public sealed class TasksControllerShould
     {
         // Arrange
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "10"); // Owner
+        _client.DefaultRequestHeaders.Add("X-User-Id", "10");
 
         // Act
         var response = await _client.GetAsync("/tasks?projectId=1");
@@ -129,7 +129,7 @@ public sealed class TasksControllerShould
         var tasks = await response.Content.ReadFromJsonAsync<List<TaskModel>>();
         tasks.Should().NotBeNull();
         tasks.Should().OnlyContain(t => t.Status == TaskStatus.Done);
-        tasks.Should().HaveCountGreaterOrEqualTo(5); // Per test data
+        tasks.Should().HaveCountGreaterOrEqualTo(5);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public sealed class TasksControllerShould
             RowVersion: 1);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "10"); // Owner
+        _client.DefaultRequestHeaders.Add("X-User-Id", "10");
 
         // Act
         var response = await _client.PutAsJsonAsync("/tasks/1", updateRequest);
@@ -210,7 +210,7 @@ public sealed class TasksControllerShould
     {
         // Arrange
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "10"); // Owner
+        _client.DefaultRequestHeaders.Add("X-User-Id", "10");
 
         var initialCount = await _fixture.CountTasksAsync();
 
@@ -229,10 +229,10 @@ public sealed class TasksControllerShould
     {
         // Arrange
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20");
 
         // Act
-        var response = await _client.DeleteAsync("/tasks/1"); // Created by user 10
+        var response = await _client.DeleteAsync("/tasks/1");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -243,10 +243,10 @@ public sealed class TasksControllerShould
     {
         // Arrange
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); 
 
         // Act
-        var response = await _client.DeleteAsync("/tasks/24"); // Created by user 20
+        var response = await _client.DeleteAsync("/tasks/24");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -259,7 +259,7 @@ public sealed class TasksControllerShould
         var assignRequest = new AssignTaskRequest(AssignedToUserId: 20);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "10"); // Owner
+        _client.DefaultRequestHeaders.Add("X-User-Id", "10");
 
         // Act
         var response = await _client.PatchAsync("/tasks/2/assign", JsonContent.Create(assignRequest));
@@ -280,7 +280,7 @@ public sealed class TasksControllerShould
         var assignRequest = new AssignTaskRequest(AssignedToUserId: 10);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20");
 
         // Act
         var response = await _client.PatchAsync("/tasks/3/assign", JsonContent.Create(assignRequest));
@@ -296,7 +296,7 @@ public sealed class TasksControllerShould
         var statusRequest = new ChangeStatusRequest(TaskStatus.InProgress);
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20");
 
         // Act
         var response = await _client.PatchAsync("/tasks/25/status", JsonContent.Create(statusRequest));
@@ -304,7 +304,6 @@ public sealed class TasksControllerShould
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Verify status change
         var getResponse = await _client.GetAsync("/tasks/25");
         var task = await getResponse.Content.ReadFromJsonAsync<TaskModel>();
         task!.Status.Should().Be(TaskStatus.InProgress);
@@ -313,7 +312,6 @@ public sealed class TasksControllerShould
     [Fact]
     public async Task ChangeStatus_Returns400_WhenInvalidStatus()
     {
-        // Arrange - Send raw JSON with invalid status string
         var jsonContent = new StringContent(
             "{\"status\": \"InvalidStatus\"}",
             System.Text.Encoding.UTF8,
@@ -347,7 +345,6 @@ public sealed class TasksControllerShould
         boardResponse!.Columns.Should().HaveCount(6);
         boardResponse.Columns.Should().ContainKeys("Todo", "InProgress", "Review", "Testing", "Done", "Blocked");
 
-        // Verify each column has tasks (per SC-002: ≥20 tasks total)
         boardResponse.Columns["Todo"].Should().NotBeEmpty();
         boardResponse.Columns["InProgress"].Should().NotBeEmpty();
         boardResponse.Columns["Review"].Should().NotBeEmpty();

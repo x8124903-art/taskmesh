@@ -173,7 +173,6 @@ else
             var success = await TaskService.ChangeStatusAsync(changeRequest.taskId, changeRequest.newStatus);
             if (success)
             {
-                Snackbar.Add("Estado de la tarea actualizado correctamente", Severity.Success);
                 await LoadBoardAsync();
             }
             else

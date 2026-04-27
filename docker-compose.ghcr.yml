@@ -43,6 +43,25 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: taskmesh-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: taskmesh
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-TaskMesh2024!}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   msauth:
     image: ghcr.io/x8124903-art/ms-auth:${IMAGE_TAG:-main}
     container_name: taskmesh-msauth
@@ -59,6 +78,8 @@ services:
       Jwt__Issuer: "taskmesh-auth"
       Jwt__Audience: "taskmesh-api"
       Jwt__AccessTokenExpirationMinutes: "15"
+      EventBus__ConnectionString: "amqp://taskmesh:${RABBITMQ_PASSWORD:-TaskMesh2024!}@rabbitmq:5672"
+      Observability__OtlpEndpoint: "http://jaeger:4317"
     depends_on:
       mysql:
         condition: service_healthy
@@ -84,15 +105,19 @@ services:
       Jwt__SecretKey: "${JWT_SECRET_KEY:-super-secret-key-change-in-production-min-256-bits}"
       Jwt__Issuer: "taskmesh-auth"
       Jwt__Audience: "taskmesh-api"
+      Observability__OtlpEndpoint: "http://jaeger:4317"
       ReverseProxy__Clusters__auth-cluster__Destinations__auth-service__Address: "http://msauth:8080"
       ReverseProxy__Clusters__projects-cluster__Destinations__projects-service__Address: "http://msprojects:8080"
       ReverseProxy__Clusters__tasks-cluster__Destinations__tasks-service__Address: "http://mstasks:8080"
+      ReverseProxy__Clusters__notifications-cluster__Destinations__notifications-service__Address: "http://msnotifications:8080"
     depends_on:
       msauth:
         condition: service_healthy
       msprojects:
         condition: service_healthy
       mstasks:
+        condition: service_healthy
+      msnotifications:
         condition: service_healthy
     networks:
       - taskmesh-network
@@ -115,10 +140,15 @@ services:
       Database__DefaultConnection: "server=mysql;uid=root;pwd=${MYSQL_ROOT_PASSWORD:-TaskMesh2024!};database=taskmesh_projects"
       RedisCache__ConnectionString: "redis:6379"
       RedisCache__Enabled: "true"
+      EventBus__ConnectionString: "amqp://taskmesh:${RABBITMQ_PASSWORD:-TaskMesh2024!}@rabbitmq:5672 "
+      MsAuth__BaseUrl: "http://msauth:8080"
+      Observability__OtlpEndpoint: "http://jaeger:4317"
     depends_on:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      msauth:
         condition: service_healthy
     networks:
       - taskmesh-network
@@ -142,12 +172,42 @@ services:
       RedisCache__ConnectionString: "redis:6379"
       RedisCache__Enabled: "true"
       MsProjects__BaseUrl: "http://msprojects:8080"
+      EventBus__ConnectionString: "amqp://taskmesh:${RABBITMQ_PASSWORD:-TaskMesh2024!}@rabbitmq:5672"
+      Observability__OtlpEndpoint: "http://jaeger:4317"
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
       msprojects:
+        condition: service_healthy
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  msnotifications:
+    image: ghcr.io/x8124903-art/ms-notifications:${IMAGE_TAG:-main}
+    container_name: taskmesh-msnotifications
+    ports:
+      - "44313:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Database__Type: MySql
+      Database__DefaultConnection: "server=mysql;uid=root;pwd=${MYSQL_ROOT_PASSWORD:-TaskMesh2024!};database=taskmesh_notifications"
+      RabbitMQ__Host: "rabbitmq"
+      RabbitMQ__Username: "taskmesh"
+      RabbitMQ__Password: "${RABBITMQ_PASSWORD:-TaskMesh2024!}"
+      Observability__OtlpEndpoint: "http://jaeger:4317"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - taskmesh-network
@@ -173,6 +233,46 @@ services:
       timeout: 10s
       retries: 3
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: taskmesh-jaeger
+    ports:
+      - "4317:4317"     # OTLP gRPC
+      - "16686:16686"   # Jaeger UI
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - taskmesh-network
+
+  prometheus:
+    build:
+      context: ./monitoring
+    container_name: taskmesh-prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - msauth
+      - msgateway
+      - msprojects
+      - mstasks
+      - msnotifications
+    networks:
+      - taskmesh-network
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: taskmesh-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - taskmesh-network
+
 networks:
   taskmesh-network:
     driver: bridge
@@ -180,3 +280,5 @@ networks:
 volumes:
   mysql-data:
   redis-data:
+  rabbitmq-data:
+  grafana-data:

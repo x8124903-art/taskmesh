@@ -244,6 +244,16 @@ else
         await LoadProjectAsync();
     }
 
+    protected override void OnParametersSet()
+    {
+        var newTab = TabNameToIndex(Tab);
+        if (newTab != activeTab)
+        {
+            activeTab = newTab;
+            StateHasChanged();
+        }
+    }
+
     private void OnTabChanged(int index)
     {
         activeTab = index;

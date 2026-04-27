@@ -18,10 +18,26 @@
             <MudText Typo="Typo.h6">TaskMesh</MudText>
             <MudSpacer />
             <MudText Typo="Typo.body1" Class="ml-4 mr-4">@AuthService.CurrentUser?.Name</MudText>
-            <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" />
-            <MudMenu Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit">
-                <MudMenuItem OnClick="@Logout">Cerrar Sesión</MudMenuItem>
-            </MudMenu>
+            <NotificationBell />
+            <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" 
+                           Color="Color.Inherit" 
+                           OnClick="@ToggleUserMenu" />
+            @if (_userMenuOpen)
+            {
+                <MudOverlay Visible="true" OnClick="@(() => _userMenuOpen = false)" 
+                            LockScroll="false" DarkBackground="false" 
+                            Style="z-index: 1299; background: transparent;" />
+                <MudPopover Open="@_userMenuOpen" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" 
+                            Style="width: 220px;">
+                    <MudPaper Elevation="4" Class="pa-0">
+                        <MudList Clickable="true" Dense="true">
+                            <MudListItem Icon="@Icons.Material.Filled.Logout" OnClick="@Logout">
+                                Cerrar Sesión
+                            </MudListItem>
+                        </MudList>
+                    </MudPaper>
+                </MudPopover>
+            }
         </MudAppBar>
         
         <MudDrawer @bind-Open="@_drawerOpen" Elevation="1" ClipMode="@DrawerClipMode.Always">
@@ -56,6 +72,7 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _userMenuOpen = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -67,8 +84,14 @@
         _drawerOpen = !_drawerOpen;
     }
 
+    private void ToggleUserMenu()
+    {
+        _userMenuOpen = !_userMenuOpen;
+    }
+
     private async Task Logout()
     {
+        _userMenuOpen = false;
         await AuthService.LogoutAsync();
         Navigation.NavigateTo("/login");
     }
