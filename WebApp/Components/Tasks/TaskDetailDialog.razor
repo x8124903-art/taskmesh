@@ -1,0 +1,259 @@
+@inject TaskApiService TaskService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (loading)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mb-4" />
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                @if (!string.IsNullOrWhiteSpace(Task.Description))
+                {
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-1">Descripción</MudText>
+                        <MudText Typo="Typo.body1" Style="white-space: pre-wrap;">@Task.Description</MudText>
+                    </div>
+                }
+                
+                <MudDivider />
+                
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Estado</MudText>
+                        <MudChip Color="@GetStatusColor(Task.Status)" Variant="Variant.Outlined" Size="Size.Medium">
+                            @GetStatusText(Task.Status)
+                        </MudChip>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Prioridad</MudText>
+                        <MudChip Color="@GetPriorityColor(Task.Priority)" Variant="Variant.Filled" Size="Size.Medium">
+                            @GetPriorityText(Task.Priority)
+                        </MudChip>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Asignado a</MudText>
+                        <MudText Typo="Typo.body1">
+                            @if (Task.AssignedToUserId.HasValue)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                <text>@GetUserName(Task.AssignedToUserId.Value)</text>
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Class="mr-1" />
+                                <text>Sin asignar</text>
+                            }
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Vencimiento</MudText>
+                        <MudText Typo="Typo.body1">
+                            @if (Task.DueDate.HasValue)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Size="Size.Small" Class="mr-1" />
+                                <text>@Task.DueDate.Value.ToString("dd/MM/yyyy")</text>
+                            }
+                            else
+                            {
+                                <text>Sin fecha</text>
+                            }
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Creado por</MudText>
+                        <MudText Typo="Typo.body1">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                            @GetUserName(Task.CreatedBy)
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Fecha de creación</MudText>
+                        <MudText Typo="Typo.body1">@Task.CreatedAt.ToString("dd/MM/yyyy HH:mm")</MudText>
+                    </MudItem>
+                </MudGrid>
+                
+                <MudDivider Class="my-2" />
+                
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                    <MudIcon Icon="@Icons.Material.Filled.Comment" Size="Size.Medium" Class="mr-2" />
+                    Comentarios (@comments.Count)
+                </MudText>
+                
+                @if (comments.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+                        No hay comentarios aún
+                    </MudText>
+                }
+                else
+                {
+                    <MudList Dense="true" Class="pa-0">
+                        @foreach (var comment in comments.OrderByDescending(c => c.CreatedAt))
+                        {
+                            <MudListItem Class="px-0">
+                                <MudPaper Class="pa-3 mb-2" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                                                @GetUserName(comment.UserId)
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @comment.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                                            </MudText>
+                                        </MudStack>
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@comment.Comment</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+                
+                @if (canAddComments)
+                {
+                    <MudDivider Class="my-2" />
+                    
+                    <MudTextField @bind-Value="newComment"
+                                  Label="Añadir comentario"
+                                  Variant="Variant.Outlined"
+                                  Lines="3"
+                                  Placeholder="Escribe tu comentario..."
+                                  MaxLength="500"
+                                  Counter="500"
+                                  Immediate="true" />
+                    
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Send"
+                               OnClick="AddComment"
+                               Disabled="string.IsNullOrWhiteSpace(newComment) || addingComment">
+                        @(addingComment ? "Añadiendo..." : "Añadir Comentario")
+                    </MudButton>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public TaskModel Task { get; set; } = new();
+    [Parameter] public List<WebApp.Models.Projects.ProjectMember> Members { get; set; } = new();
+    [Parameter] public string UserRole { get; set; } = string.Empty;
+
+    private bool loading = true;
+    private bool addingComment = false;
+    private bool canAddComments => UserRole != "Viewer";
+    private List<TaskCommentModel> comments = new();
+    private string newComment = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadComments();
+    }
+
+    private async Task LoadComments()
+    {
+        loading = true;
+        try
+        {
+            comments = await TaskService.GetCommentsAsync(Task.IdTask);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar comentarios: {ex.Message}", Severity.Error);
+            comments = new List<TaskCommentModel>();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task AddComment()
+    {
+        if (string.IsNullOrWhiteSpace(newComment))
+            return;
+
+        addingComment = true;
+        try
+        {
+            var request = new AddTaskCommentRequest(newComment.Trim());
+            var addedComment = await TaskService.AddCommentAsync(Task.IdTask, request);
+
+            if (addedComment != null)
+            {
+                Snackbar.Add("Comentario añadido correctamente", Severity.Success);
+                newComment = string.Empty;
+                await LoadComments();
+            }
+            else
+            {
+                Snackbar.Add("Error al añadir el comentario", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            addingComment = false;
+        }
+    }
+
+    private void Close()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private Color GetPriorityColor(string priority) => priority switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Success,
+        _ => Color.Default
+    };
+
+    private string GetPriorityText(string priority) => priority switch
+    {
+        "High" => "Alta",
+        "Medium" => "Media",
+        "Low" => "Baja",
+        _ => priority
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Done" => Color.Success,
+        "InProgress" => Color.Info,
+        "Review" => Color.Primary,
+        "Testing" => Color.Warning,
+        "Blocked" => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetStatusText(string status) => status switch
+    {
+        "Todo" => "Pendiente",
+        "InProgress" => "En Progreso",
+        "Review" => "Revisión",
+        "Testing" => "Pruebas",
+        "Done" => "Completada",
+        "Blocked" => "Bloqueada",
+        _ => status
+    };
+
+    private string GetUserName(int userId)
+    {
+        var member = Members.FirstOrDefault(m => m.UserId == userId);
+        return member?.UserName ?? $"Usuario #{userId}";
+    }
+}

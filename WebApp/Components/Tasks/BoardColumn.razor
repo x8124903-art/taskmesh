@@ -1,0 +1,81 @@
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="2" Style="min-height: 500px; background-color: var(--mud-palette-background-grey);">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h6" Style="font-weight: 600;">@Title</MudText>
+        <MudChip Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">@Tasks.Count</MudChip>
+    </MudStack>
+    
+    <MudDivider Class="mb-4" />
+    
+    @if (Tasks.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="mt-8">
+            No hay tareas
+        </MudText>
+    }
+    else
+    {
+        <MudStack Spacing="2">
+            @foreach (var task in Tasks)
+            {
+                <div>
+                    <TaskCard Task="@task" OnClick="@((t) => OnTaskClick.InvokeAsync(t))" Members="@Members" />
+                    
+                    @if (UserRole != "Viewer" && GetAvailableStatusTransitions(task).Any())
+                    {
+                        <MudMenu Dense="true" Size="Size.Small" Class="mt-1" ActivationEvent="@MouseEvent.LeftClick">
+                            <ActivatorContent>
+                                <MudButton Size="Size.Small" 
+                                           Variant="Variant.Text" 
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.MoveUp"
+                                           FullWidth="true">
+                                    Mover a...
+                                </MudButton>
+                            </ActivatorContent>
+                            <ChildContent>
+                                @foreach (var transition in GetAvailableStatusTransitions(task))
+                                {
+                                    <MudMenuItem OnClick="@(() => HandleStatusChange(task, transition.Status))">
+                                        @transition.Label
+                                    </MudMenuItem>
+                                }
+                            </ChildContent>
+                        </MudMenu>
+                    }
+                </div>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Status { get; set; } = string.Empty;
+    [Parameter] public List<TaskModel> Tasks { get; set; } = new();
+    [Parameter] public EventCallback<TaskModel> OnTaskClick { get; set; }
+    [Parameter] public EventCallback<(int taskId, string newStatus)> OnStatusChange { get; set; }
+    [Parameter] public string UserRole { get; set; } = string.Empty;
+    [Parameter] public List<WebApp.Models.Projects.ProjectMember> Members { get; set; } = new();
+
+    private async Task HandleStatusChange(TaskModel task, string newStatus)
+    {
+        await OnStatusChange.InvokeAsync((task.IdTask, newStatus));
+    }
+
+    private List<(string Status, string Label)> GetAvailableStatusTransitions(TaskModel task)
+    {
+        var allStatuses = new List<(string Status, string Label)>
+        {
+            ("Todo", "Pendiente"),
+            ("InProgress", "En Progreso"),
+            ("Review", "Revisión"),
+            ("Testing", "Pruebas"),
+            ("Done", "Completada"),
+            ("Blocked", "Bloqueada")
+        };
+
+        return allStatuses.Where(s => s.Status != task.Status).ToList();
+    }
+}

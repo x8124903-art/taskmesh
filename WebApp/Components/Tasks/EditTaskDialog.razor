@@ -1,0 +1,200 @@
+@inject WebApp.Services.TaskApiService TaskService
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isFormValid">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="model.Title"
+                              Label="Título"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="El título es requerido"
+                              Counter="200"
+                              MaxLength="200"
+                              Immediate="true"
+                              HelperText="Título breve y descriptivo de la tarea" />
+                
+                <MudTextField @bind-Value="model.Description"
+                              Label="Descripción"
+                              Variant="Variant.Outlined"
+                              Lines="4"
+                              HelperText="Detalles adicionales sobre la tarea (opcional)" />
+                
+                <MudSelect T="string" 
+                           @bind-Value="model.Priority"
+                           Label="Prioridad"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@("Low")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
+                            <MudText>Baja</MudText>
+                        </div>
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.DragHandle" Color="Color.Warning" Size="Size.Small" />
+                            <MudText>Media</MudText>
+                        </div>
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("High")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Error" Size="Size.Small" />
+                            <MudText>Alta</MudText>
+                        </div>
+                    </MudSelectItem>
+                </MudSelect>
+                
+                <MudSelect T="int?" 
+                           @bind-Value="model.AssignedToUserId"
+                           Label="Asignado a"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           AnchorOrigin="Origin.BottomCenter"
+                           ToStringFunc="@(id => members.FirstOrDefault(m => m.UserId == id)?.UserName ?? "")">
+                    @foreach (var member in members)
+                    {
+                        <MudSelectItem Value="@((int?)member.UserId)">
+                            <div class="d-flex align-center gap-2">
+                                <MudAvatar Color="Color.Primary" Size="Size.Small">@member.UserName.Substring(0, 1).ToUpper()</MudAvatar>
+                                <MudText>@member.UserName</MudText>
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudDatePicker @bind-Date="model.DueDate"
+                               Label="Fecha de Vencimiento"
+                               Variant="Variant.Outlined"
+                               MinDate="DateTime.Today"
+                               Clearable="true"
+                               Editable="true"
+                               DateFormat="dd/MM/yyyy" />
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@updating">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="UpdateTask" 
+                   Disabled="@(!isFormValid || updating)">
+            @(updating ? "Guardando..." : "Guardar Cambios")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public WebApp.Models.Tasks.TaskModel Task { get; set; } = default!;
+
+    private MudForm form = default!;
+    private bool isFormValid = false;
+    private bool updating = false;
+    private string errorMessage = string.Empty;
+    private EditTaskModel model = new();
+    private List<WebApp.Models.Projects.ProjectMember> members = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-populate form with existing task data
+        model.Title = Task.Title;
+        model.Description = Task.Description;
+        model.Priority = Task.Priority;
+        model.AssignedToUserId = Task.AssignedToUserId;
+        model.DueDate = Task.DueDate;
+        model.RowVersion = Task.RowVersion;
+
+        try
+        {
+            members = await ProjectService.GetMembersAsync(Task.ProjectId);
+        }
+        catch (Exception)
+        {
+            // Ignore errors loading members
+        }
+    }
+
+    private async Task UpdateTask()
+    {
+        updating = true;
+        errorMessage = string.Empty;
+        
+        try
+        {
+            await form.Validate();
+            
+            if (!isFormValid)
+            {
+                updating = false;
+                return;
+            }
+            
+            var request = new WebApp.Models.Tasks.UpdateTaskRequest
+            {
+                Title = model.Title.Trim(),
+                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
+                AssignedToUserId = model.AssignedToUserId,
+                Priority = model.Priority,
+                DueDate = model.DueDate,
+                RowVersion = model.RowVersion
+            };
+            
+            var success = await TaskService.UpdateAsync(Task.IdTask, request);
+            
+            if (success)
+            {
+                Snackbar.Add($"Tarea '{model.Title}' actualizada correctamente", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                errorMessage = "No se pudo actualizar la tarea. Verifica que tienes permisos.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Message.Contains("409"))
+            {
+                errorMessage = "La tarea fue modificada por otro usuario. Recarga la página e intenta de nuevo.";
+                Snackbar.Add("Conflicto de concurrencia detectado", Severity.Warning);
+            }
+            else if (ex.Message.Contains("403"))
+            {
+                errorMessage = "No tienes permisos para editar esta tarea.";
+            }
+            else if (ex.Message.Contains("404"))
+            {
+                errorMessage = "La tarea ya no existe.";
+            }
+            else
+            {
+                errorMessage = "Error al actualizar la tarea. Inténtalo de nuevo.";
+            }
+        }
+        finally
+        {
+            updating = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class EditTaskModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Priority { get; set; } = "Medium";
+        public int? AssignedToUserId { get; set; }
+        public DateTime? DueDate { get; set; }
+        public int RowVersion { get; set; }
+    }
+}

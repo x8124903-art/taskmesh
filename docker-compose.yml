@@ -83,10 +83,13 @@ services:
       Jwt__Audience: "taskmesh-api"
       ReverseProxy__Clusters__auth-cluster__Destinations__auth-service__Address: "http://msauth:8080"
       ReverseProxy__Clusters__projects-cluster__Destinations__projects-service__Address: "http://msprojects:8080"
+      ReverseProxy__Clusters__tasks-cluster__Destinations__tasks-service__Address: "http://mstasks:8080"
     depends_on:
       msauth:
         condition: service_healthy
       msprojects:
+        condition: service_healthy
+      mstasks:
         condition: service_healthy
     networks:
       - taskmesh-network
@@ -115,6 +118,37 @@ services:
       mysql:
         condition: service_healthy
       redis:
+        condition: service_healthy
+    networks:
+      - taskmesh-network
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  mstasks:
+    build:
+      context: ./MsTasks
+      dockerfile: Dockerfile
+    container_name: taskmesh-mstasks
+    ports:
+      - "44312:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      Database__Type: MySql
+      Database__DefaultConnection: "server=mysql;uid=root;pwd=TaskMesh2024!;database=taskmesh_tasks"
+      RedisCache__ConnectionString: "redis:6379"
+      RedisCache__Enabled: "true"
+      MsProjects__BaseUrl: "http://msprojects:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      msprojects:
         condition: service_healthy
     networks:
       - taskmesh-network

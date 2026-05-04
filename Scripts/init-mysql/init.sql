@@ -1,5 +1,6 @@
 CREATE DATABASE IF NOT EXISTS taskmesh_auth;
 CREATE DATABASE IF NOT EXISTS taskmesh_projects;
+CREATE DATABASE IF NOT EXISTS taskmesh_tasks;
 
 USE taskmesh_auth;
 
@@ -108,4 +109,46 @@ CREATE TABLE IF NOT EXISTS ProjectInvitation (
     INDEX idx_role (Role),
     FOREIGN KEY (ProjectId) REFERENCES Project(IdProject) ON DELETE CASCADE,
     FOREIGN KEY (Role) REFERENCES ProjectRole(IdProjectRole)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ========================================
+-- TASKMESH_TASKS DATABASE
+-- ========================================
+
+USE taskmesh_tasks;
+
+CREATE TABLE IF NOT EXISTS Task (
+    IdTask INT AUTO_INCREMENT PRIMARY KEY,
+    ProjectId INT NOT NULL,
+    Title VARCHAR(200) NOT NULL,
+    Description TEXT,
+    Status INT NOT NULL DEFAULT 1,
+    Priority INT NOT NULL DEFAULT 2,
+    AssignedToUserId INT NULL,
+    CreatedBy INT NOT NULL,
+    DueDate DATETIME NULL,
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    RowVersion INT NOT NULL DEFAULT 1,
+    IsDeleted BOOLEAN DEFAULT FALSE,
+    DeletedAt DATETIME NULL,
+    INDEX idx_project_id (ProjectId),
+    INDEX idx_status (Status),
+    INDEX idx_priority (Priority),
+    INDEX idx_assigned_to (AssignedToUserId),
+    INDEX idx_created_by (CreatedBy),
+    INDEX idx_is_deleted (IsDeleted),
+    INDEX idx_project_status (ProjectId, Status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS TaskComment (
+    IdTaskComment INT AUTO_INCREMENT PRIMARY KEY,
+    TaskId INT NOT NULL,
+    UserId INT NOT NULL,
+    Comment TEXT NOT NULL,
+    CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_task_id (TaskId),
+    INDEX idx_user_id (UserId),
+    INDEX idx_created_at (CreatedAt),
+    FOREIGN KEY (TaskId) REFERENCES Task(IdTask) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

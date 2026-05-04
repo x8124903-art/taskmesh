@@ -47,6 +47,7 @@ builder.Services.AddScoped<IDeleteProjectUseCase, DeleteProjectUseCase>();
 
 // ProjectMember UseCases
 builder.Services.AddScoped<IGetProjectMembersUseCase, GetProjectMembersUseCase>();
+builder.Services.AddScoped<IGetProjectMemberRoleUseCase, GetProjectMemberRoleUseCase>();
 builder.Services.AddScoped<IChangeProjectMemberRoleUseCase, ChangeProjectMemberRoleUseCase>();
 builder.Services.AddScoped<IRemoveProjectMemberUseCase, RemoveProjectMemberUseCase>();
 

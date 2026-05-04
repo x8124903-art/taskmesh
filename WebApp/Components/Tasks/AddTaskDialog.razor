@@ -1,0 +1,185 @@
+@inject WebApp.Services.TaskApiService TaskService
+@inject WebApp.Services.ProjectApiService ProjectService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="form" @bind-IsValid="@isFormValid">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="model.Title"
+                              Label="Título"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="El título es requerido"
+                              Counter="200"
+                              MaxLength="200"
+                              Immediate="true"
+                              HelperText="Título breve y descriptivo de la tarea" />
+                
+                <MudTextField @bind-Value="model.Description"
+                              Label="Descripción"
+                              Variant="Variant.Outlined"
+                              Lines="4"
+                              HelperText="Detalles adicionales sobre la tarea (opcional)" />
+                
+                <MudSelect T="string" 
+                           @bind-Value="model.Priority"
+                           Label="Prioridad"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem Value="@("Low")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Success" Size="Size.Small" />
+                            <MudText>Baja</MudText>
+                        </div>
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("Medium")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.DragHandle" Color="Color.Warning" Size="Size.Small" />
+                            <MudText>Media</MudText>
+                        </div>
+                    </MudSelectItem>
+                    <MudSelectItem Value="@("High")">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Error" Size="Size.Small" />
+                            <MudText>Alta</MudText>
+                        </div>
+                    </MudSelectItem>
+                </MudSelect>
+                
+                <MudSelect T="int?" 
+                           @bind-Value="model.AssignedToUserId"
+                           Label="Asignado a"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var member in members)
+                    {
+                        <MudSelectItem Value="@((int?)member.UserId)">
+                            <div class="d-flex align-center gap-2">
+                                <MudAvatar Color="Color.Primary" Size="Size.Small">@member.UserName.Substring(0, 1).ToUpper()</MudAvatar>
+                                <MudText>@member.UserName</MudText>
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudDatePicker @bind-Date="model.DueDate"
+                               Label="Fecha de Vencimiento"
+                               Variant="Variant.Outlined"
+                               MinDate="DateTime.Today"
+                               Clearable="true"
+                               Editable="true"
+                               DateFormat="dd/MM/yyyy" />
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@creating">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="CreateTask" 
+                   Disabled="@(!isFormValid || creating)">
+            @(creating ? "Creando..." : "Crear Tarea")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int ProjectId { get; set; }
+
+    private MudForm form = default!;
+    private bool isFormValid = false;
+    private bool creating = false;
+    private string errorMessage = string.Empty;
+    private AddTaskModel model = new() { Priority = "Medium" };
+    private List<WebApp.Models.Projects.ProjectMember> members = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            members = await ProjectService.GetMembersAsync(ProjectId);
+        }
+        catch (Exception)
+        {
+            // Ignore errors loading members
+        }
+    }
+
+    private async Task CreateTask()
+    {
+        creating = true;
+        errorMessage = string.Empty;
+        
+        try
+        {
+            await form.Validate();
+            
+            if (!isFormValid)
+            {
+                creating = false;
+                return;
+            }
+            
+            var request = new WebApp.Models.Tasks.AddTaskRequest
+            {
+                Title = model.Title.Trim(),
+                Description = string.IsNullOrWhiteSpace(model.Description) ? null : model.Description.Trim(),
+                ProjectId = ProjectId,
+                AssignedToUserId = model.AssignedToUserId,
+                Priority = model.Priority,
+                DueDate = model.DueDate
+            };
+            
+            var task = await TaskService.CreateAsync(request);
+            
+            if (task != null)
+            {
+                Snackbar.Add($"Tarea '{model.Title}' creada correctamente", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(task));
+            }
+            else
+            {
+                errorMessage = "No se pudo crear la tarea. Verifica que tienes permisos.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Message.Contains("403"))
+            {
+                errorMessage = "No tienes permisos para crear tareas en este proyecto.";
+            }
+            else if (ex.Message.Contains("400"))
+            {
+                errorMessage = "Los datos de la tarea son inválidos. Verifica el título y la prioridad.";
+            }
+            else
+            {
+                errorMessage = "Error al crear la tarea. Inténtalo de nuevo.";
+            }
+        }
+        finally
+        {
+            creating = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class AddTaskModel
+    {
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Priority { get; set; } = "Medium";
+        public int? AssignedToUserId { get; set; }
+        public DateTime? DueDate { get; set; }
+    }
+}

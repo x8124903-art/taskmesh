@@ -17,13 +17,19 @@ public class AuthService : IAuthService
         _httpClient = httpClient;
         _jsRuntime = jsRuntime;
         _logger = logger;
+        _initTcs.TrySetResult();
     }
+
+    private TaskCompletionSource _initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public User? CurrentUser { get; set; }
     public bool IsAuthenticated => CurrentUser != null;
 
+    public Task EnsureInitializedAsync() => _initTcs.Task;
+
     public async Task<bool> InitializeAsync()
     {
+        _initTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
         {
             var token = await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", "accessToken");
@@ -38,6 +44,7 @@ public class AuthService : IAuthService
                         Email = claims.GetValueOrDefault("email", ""),
                         Name = claims.GetValueOrDefault("name", "")
                     };
+                    _initTcs.TrySetResult();
                     return true;
                 }
             }
@@ -46,6 +53,7 @@ public class AuthService : IAuthService
         {
             _logger.LogError(ex, "Error initializing authentication from stored token");
         }
+        _initTcs.TrySetResult();
         return false;
     }
 

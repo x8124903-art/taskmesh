@@ -1,0 +1,354 @@
+@inject WebApp.Services.TaskApiService TaskService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4 mb-4" Elevation="0">
+    <MudGrid>
+        <MudItem xs="12" sm="4" md="3">
+            <MudSelect T="string" 
+                       Value="statusFilter"
+                       ValueChanged="@((string v) => { statusFilter = v; OnFiltersChanged(); })"
+                       Label="Estado"
+                       Variant="Variant.Outlined"
+                       Clearable="true"
+                       AnchorOrigin="Origin.BottomCenter"
+                       OnClearButtonClick="@(() => { statusFilter = null; OnFiltersChanged(); })">
+                <MudSelectItem Value="@("Todo")">Pendiente</MudSelectItem>
+                <MudSelectItem Value="@("InProgress")">En Progreso</MudSelectItem>
+                <MudSelectItem Value="@("Review")">Revisión</MudSelectItem>
+                <MudSelectItem Value="@("Testing")">Pruebas</MudSelectItem>
+                <MudSelectItem Value="@("Done")">Completada</MudSelectItem>
+                <MudSelectItem Value="@("Blocked")">Bloqueada</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4" md="3">
+            <MudSelect T="string" 
+                       Value="priorityFilter"
+                       ValueChanged="@((string v) => { priorityFilter = v; OnFiltersChanged(); })"
+                       Label="Prioridad"
+                       Variant="Variant.Outlined"
+                       Clearable="true"
+                       AnchorOrigin="Origin.BottomCenter"
+                       OnClearButtonClick="@(() => { priorityFilter = null; OnFiltersChanged(); })">
+                <MudSelectItem Value="@("Low")">Baja</MudSelectItem>
+                <MudSelectItem Value="@("Medium")">Media</MudSelectItem>
+                <MudSelectItem Value="@("High")">Alta</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4" md="3">
+            <MudTextField @bind-Value="searchText"
+                          Label="Buscar"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyUp="OnSearchKeyUp"
+                          Immediate="false" />
+        </MudItem>
+        <MudItem xs="12" sm="12" md="3" Class="d-flex align-end justify-end">
+            @if (!IsViewer)
+            {
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddTaskDialog">
+                    Nueva Tarea
+                </MudButton>
+            }
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudTable Items="@filteredTasks" 
+          Loading="@loading" 
+          Hover="true" 
+          Breakpoint="Breakpoint.Sm"
+          Dense="true"
+          Elevation="0"
+          OnRowClick="@((TableRowClickEventArgs<TaskModel> args) => OpenTaskDetail(args.Item))">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Título</MudTh>
+        <MudTh>Prioridad</MudTh>
+        <MudTh>Estado</MudTh>
+        <MudTh>Asignado a</MudTh>
+        <MudTh>Vencimiento</MudTh>
+        @if (!IsViewer)
+        {
+            <MudTh Style="text-align: right;">Acciones</MudTh>
+        }
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="ID">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">#@context.IdTask</MudText>
+        </MudTd>
+        <MudTd DataLabel="Título">
+            <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Title</MudText>
+            @if (!string.IsNullOrEmpty(context.Description))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@(context.Description.Length > 50 ? context.Description.Substring(0, 50) + "..." : context.Description)</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Prioridad">
+            <MudChip Size="Size.Small" Color="@GetPriorityColor(context.Priority)">
+                @GetPriorityText(context.Priority)
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Estado">
+            <MudChip Size="Size.Small" Variant="Variant.Outlined" Color="@GetStatusColor(context.Status)">
+                @GetStatusText(context.Status)
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Asignado a">
+            @if (context.AssignedToUserId.HasValue)
+            {
+                <div class="d-flex align-center gap-1">
+                    <MudAvatar Size="Size.Small" Color="Color.Primary">
+                        @GetUserInitials(context.AssignedToUserId.Value)
+                    </MudAvatar>
+                    <MudText Typo="Typo.body2">@GetUserName(context.AssignedToUserId.Value)</MudText>
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Sin asignar</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Vencimiento">
+            @if (context.DueDate.HasValue)
+            {
+                var daysUntil = (context.DueDate.Value - DateTime.Now).Days;
+                <MudText Typo="Typo.body2" Color="@(daysUntil < 0 ? Color.Error : daysUntil <= 3 ? Color.Warning : Color.Default)">
+                    @context.DueDate.Value.ToString("dd/MM/yyyy")
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+            }
+        </MudTd>
+        <MudTd DataLabel="Acciones" Style="text-align: right;">
+            @if (!IsViewer)
+            {
+                <MudTooltip Text="Editar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="@(() => OpenEditTaskDialog(context))" />
+                </MudTooltip>
+                <MudTooltip Text="Eliminar">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                   Size="Size.Small" 
+                                   Color="Color.Error"
+                                   OnClick="@(() => DeleteTask(context))" />
+                </MudTooltip>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            No hay tareas que mostrar
+        </MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter] public int ProjectId { get; set; }
+    [Parameter] public List<WebApp.Models.Projects.ProjectMember> Members { get; set; } = new();
+    [Parameter] public string UserRole { get; set; } = string.Empty;
+
+    private bool IsViewer => UserRole == "Viewer";
+
+    private List<WebApp.Models.Tasks.TaskModel> tasks = new();
+    private List<WebApp.Models.Tasks.TaskModel> filteredTasks = new();
+    private bool loading = true;
+    private string? statusFilter;
+    private string? priorityFilter;
+    private string? searchText;
+    private Dictionary<int, string> userNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        loading = true;
+        try
+        {
+            tasks = await TaskService.GetByProjectAsync(ProjectId);
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al cargar tareas: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        filteredTasks = tasks.Where(t =>
+        {
+            if (!string.IsNullOrEmpty(statusFilter) && t.Status != statusFilter)
+                return false;
+            
+            if (!string.IsNullOrEmpty(priorityFilter) && t.Priority != priorityFilter)
+                return false;
+            
+            if (!string.IsNullOrEmpty(searchText))
+            {
+                var search = searchText.ToLower();
+                if (!t.IdTask.ToString().Contains(search) &&
+                    !t.Title.ToLower().Contains(search) && 
+                    (string.IsNullOrEmpty(t.Description) || !t.Description.ToLower().Contains(search)))
+                    return false;
+            }
+            
+            return true;
+        }).ToList();
+    }
+
+    private void OnFiltersChanged()
+    {
+        ApplyFilters();
+        StateHasChanged();
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ApplyFilters();
+        }
+    }
+
+    private async Task OpenAddTaskDialog()
+    {
+        var parameters = new DialogParameters { ["ProjectId"] = ProjectId };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<AddTaskDialog>("Nueva Tarea", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadTasks();
+        }
+    }
+
+    private async Task OpenEditTaskDialog(WebApp.Models.Tasks.TaskModel task)
+    {
+        var parameters = new DialogParameters { ["Task"] = task };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<EditTaskDialog>("Editar Tarea", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadTasks();
+        }
+    }
+
+    private async Task OpenTaskDetail(WebApp.Models.Tasks.TaskModel task)
+    {
+        var parameters = new DialogParameters
+        {
+            ["Task"] = task,
+            ["Members"] = Members,
+            ["UserRole"] = UserRole
+        };
+        
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TaskDetailDialog>($"#{task.IdTask} - {task.Title}", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadTasks();
+        }
+    }
+
+    private async Task DeleteTask(WebApp.Models.Tasks.TaskModel task)
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Confirmar Eliminación",
+            $"¿Estás seguro de que deseas eliminar la tarea '{task.Title}'?",
+            yesText: "Eliminar", 
+            cancelText: "Cancelar");
+
+        if (confirm == true)
+        {
+            var success = await TaskService.DeleteAsync(task.IdTask);
+            
+            if (success)
+            {
+                Snackbar.Add($"Tarea '{task.Title}' eliminada correctamente", Severity.Success);
+                await LoadTasks();
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar la tarea. Verifica que tienes permisos.", Severity.Error);
+            }
+        }
+    }
+
+    private Color GetPriorityColor(string priority) => priority switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Success,
+        _ => Color.Default
+    };
+
+    private string GetPriorityText(string priority) => priority switch
+    {
+        "High" => "Alta",
+        "Medium" => "Media",
+        "Low" => "Baja",
+        _ => priority
+    };
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Done" => Color.Success,
+        "InProgress" => Color.Info,
+        "Review" => Color.Primary,
+        "Testing" => Color.Warning,
+        "Blocked" => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetStatusText(string status) => status switch
+    {
+        "Todo" => "Pendiente",
+        "InProgress" => "En Progreso",
+        "Review" => "Revisión",
+        "Testing" => "Pruebas",
+        "Done" => "Completada",
+        "Blocked" => "Bloqueada",
+        _ => status
+    };
+
+    private string GetUserInitials(int userId)
+    {
+        var member = Members.FirstOrDefault(m => m.UserId == userId);
+        if (member != null && !string.IsNullOrEmpty(member.UserName))
+            return member.UserName.Substring(0, 1).ToUpper();
+        return "?";
+    }
+
+    private string GetUserName(int userId)
+    {
+        var member = Members.FirstOrDefault(m => m.UserId == userId);
+        return member?.UserName ?? $"Usuario #{userId}";
+    }
+}

@@ -11,15 +11,18 @@ public sealed class ProjectMembersController : ControllerBase
     private readonly IGetProjectMembersUseCase _getMembers;
     private readonly IChangeProjectMemberRoleUseCase _changeRole;
     private readonly IRemoveProjectMemberUseCase _removeMember;
+    private readonly IGetProjectMemberRoleUseCase _getRole;
 
     public ProjectMembersController(
         IGetProjectMembersUseCase getMembers,
         IChangeProjectMemberRoleUseCase changeRole,
-        IRemoveProjectMemberUseCase removeMember)
+        IRemoveProjectMemberUseCase removeMember,
+        IGetProjectMemberRoleUseCase getRole)
     {
         _getMembers = getMembers;
         _changeRole = changeRole;
         _removeMember = removeMember;
+        _getRole = getRole;
     }
 
     private int GetCurrentUserId()
@@ -40,6 +43,17 @@ public sealed class ProjectMembersController : ControllerBase
         var currentUserId = GetCurrentUserId();
         var members = await _getMembers.ExecuteAsync(projectId, currentUserId, cancellationToken);
         return Ok(members);
+    }
+
+    [HttpGet("{userId}/role")]
+    public async Task<IActionResult> GetRole(int projectId, int userId, CancellationToken cancellationToken)
+    {
+        var result = await _getRole.ExecuteAsync(projectId, userId, cancellationToken);
+        
+        if (result is null)
+            return NotFound(new { message = "User is not a member of this project." });
+        
+        return Ok(result);
     }
 
     [HttpPut("{userId}/role")]
