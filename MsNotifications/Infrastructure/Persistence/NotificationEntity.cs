@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsNotifications.Infrastructure.Persistence;
 
+[ExcludeFromCodeCoverage]
 internal sealed record NotificationEntity(
     int IdNotification,
     int UserId,

@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsProjects.Domain.Events;
 
+[ExcludeFromCodeCoverage]
 public sealed record MemberRemovedEvent(
     string EventId,
     DateTime OccurredAt,

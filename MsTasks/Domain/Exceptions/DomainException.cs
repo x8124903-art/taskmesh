@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsTasks.Domain.Exceptions;
 
+[ExcludeFromCodeCoverage]
 public class DomainException : Exception
 {
     public DomainException(string message) : base(message)

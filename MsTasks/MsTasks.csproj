@@ -9,6 +9,9 @@
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="MsTasks.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="MassTransit" Version="7.3.1" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="7.3.1" />
     <PackageReference Include="MassTransit.AspNetCore" Version="7.3.1" />

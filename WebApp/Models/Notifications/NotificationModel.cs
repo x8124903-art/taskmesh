@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Notifications;
 
+[ExcludeFromCodeCoverage]
 public sealed record NotificationModel(
     int IdNotification,
     int UserId,

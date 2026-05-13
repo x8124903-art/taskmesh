@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsTasks.Domain.Events;
 
+[ExcludeFromCodeCoverage]
 public sealed record TaskStatusChangedEvent(
     string EventId,
     DateTime OccurredAt,

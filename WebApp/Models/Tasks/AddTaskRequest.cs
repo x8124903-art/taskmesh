@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Tasks;
 
+[ExcludeFromCodeCoverage]
 public class AddTaskRequest
 {
     public string Title { get; set; } = string.Empty;

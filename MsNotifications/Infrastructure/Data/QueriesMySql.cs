@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsNotifications.Infrastructure.Data;
 
+[ExcludeFromCodeCoverage]
 internal static class QueriesMySql
 {
     internal const string GetByUserId = @"

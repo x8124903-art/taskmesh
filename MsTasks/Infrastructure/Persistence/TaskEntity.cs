@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsTasks.Infrastructure.Persistence;
 
+[ExcludeFromCodeCoverage]
 internal sealed record TaskEntity(
     int IdTask,
     string Title,

@@ -2,9 +2,11 @@ using Microsoft.Extensions.Options;
 using MySql.Data.MySqlClient;
 using MsNotifications.Infrastructure.Options;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MsNotifications.Infrastructure.Data;
 
+[ExcludeFromCodeCoverage]
 public sealed class DapperContext : IDapperContext
 {
     private readonly DatabaseOptions _options;

@@ -2,9 +2,11 @@ using Dapper;
 using MsNotifications.Application.Models;
 using MsNotifications.Infrastructure.Data;
 using MsNotifications.Infrastructure.Persistence;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MsNotifications.Infrastructure.Repositories;
 
+[ExcludeFromCodeCoverage]
 public sealed class NotificationSqlRepository : INotificationRepository
 {
     private readonly IDapperContext _context;

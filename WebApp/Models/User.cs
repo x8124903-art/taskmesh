@@ -1,7 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace WebApp.Models;
 
+[ExcludeFromCodeCoverage]
 public class User
 {
     [JsonPropertyName("idUser")]

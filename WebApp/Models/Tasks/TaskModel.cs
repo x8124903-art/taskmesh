@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Tasks;
 
+[ExcludeFromCodeCoverage]
 public class TaskModel
 {
     public int IdTask { get; set; }

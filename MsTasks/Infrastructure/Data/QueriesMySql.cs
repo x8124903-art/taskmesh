@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsTasks.Infrastructure.Data;
 
+[ExcludeFromCodeCoverage]
 internal static class QueriesMySql
 {
     internal const string GetByProjectId = @"

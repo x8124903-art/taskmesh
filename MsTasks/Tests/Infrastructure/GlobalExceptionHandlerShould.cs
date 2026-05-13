@@ -93,4 +93,41 @@ public sealed class GlobalExceptionHandlerShould
         result.Should().BeTrue();
         context.Response.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
     }
+
+    [Fact]
+    public async Task ReturnBadRequest_WhenArgumentException()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        var exception = new ArgumentException("Invalid argument");
+
+        // Act
+        var result = await _handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        // Assert
+        result.Should().BeTrue();
+        context.Response.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+    }
+
+    [Fact]
+    public async Task LogError_WhenExceptionOccurs()
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var exception = new Exception("Test error");
+
+        // Act
+        await _handler.TryHandleAsync(context, exception, CancellationToken.None);
+
+        // Assert
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => true),
+                exception,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 }

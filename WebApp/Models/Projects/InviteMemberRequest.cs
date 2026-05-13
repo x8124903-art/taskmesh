@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Projects;
 
 /// <summary>
 /// Request to invite a member to a project
 /// </summary>
+[ExcludeFromCodeCoverage]
 public class InviteMemberRequest
 {
     public int ProjectId { get; set; }

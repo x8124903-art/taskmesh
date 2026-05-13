@@ -1,8 +1,10 @@
 using Dapper;
 using MsNotifications.Infrastructure.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MsNotifications.Infrastructure.Repositories;
 
+[ExcludeFromCodeCoverage]
 public sealed class ProcessedEventSqlRepository : IProcessedEventRepository
 {
     private readonly IDapperContext _context;

@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsProjects.Domain.Events;
 
+[ExcludeFromCodeCoverage]
 public sealed record MemberInvitedEvent(
     string EventId,
     DateTime OccurredAt,
