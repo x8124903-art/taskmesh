@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -466,7 +466,7 @@ public sealed class ProjectDetailPageShould : TestContext
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("No Desc"), TimeSpan.FromSeconds(3));
 
-        cut.Markup.Should().Contain("Sin descripci�n");
+        cut.Markup.Should().Contain("Sin descripción");
     }
 
     [Fact]

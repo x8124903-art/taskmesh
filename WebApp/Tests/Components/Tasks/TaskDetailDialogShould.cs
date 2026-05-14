@@ -1,4 +1,4 @@
-using System.Text;
+ï»¿using System.Text;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
@@ -50,7 +50,7 @@ public sealed class TaskDetailDialogShould : TestContext
         comp.Markup.Should().Contain("A description");
         comp.Markup.Should().Contain("Alice");
         comp.Markup.Should().Contain("Alta");
-        comp.Markup.Should().Contain("Añadir comentario");
+        comp.Markup.Should().Contain("AÃ±adir comentario");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class TaskDetailDialogShould : TestContext
         };
         await comp.InvokeAsync(() => dialogService.Show<TaskDetailDialog>("Task", parameters));
 
-        comp.Markup.Should().NotContain("Añadir comentario");
+        comp.Markup.Should().NotContain("AÃ±adir comentario");
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed class TaskDetailDialogShould : TestContext
         };
         await comp.InvokeAsync(() => dialogService.Show<TaskDetailDialog>("Task", parameters));
 
-        comp.Markup.Should().NotContain("Descripción");
+        comp.Markup.Should().NotContain("DescripciÃ³n");
     }
 
     [Fact]
@@ -362,7 +362,7 @@ public sealed class TaskDetailDialogShould : TestContext
     [Theory]
     [InlineData("Todo", "Pendiente")]
     [InlineData("InProgress", "En Progreso")]
-    [InlineData("Review", "Revisión")]
+    [InlineData("Review", "RevisiÃ³n")]
     [InlineData("Testing", "Pruebas")]
     [InlineData("Done", "Completada")]
     [InlineData("Blocked", "Bloqueada")]
