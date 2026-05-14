@@ -1,6 +1,9 @@
 using MsProjects.Application.Models;
+using MsProjects.Domain.Events;
 using MsProjects.Domain.Services.Authorization;
 using MsProjects.Domain.Services.Exceptions;
+using MsProjects.Infrastructure.EventBus;
+using MsProjects.Infrastructure.HttpClients;
 using MsProjects.Infrastructure.Repositories;
 using System.Security.Cryptography;
 
@@ -12,6 +15,9 @@ public sealed class ProjectInvitationService : IProjectInvitationService
     private readonly IProjectMemberRepository _memberRepository;
     private readonly IProjectRepository _projectRepository;
     private readonly IProjectAuthorizationService _authService;
+    private readonly IEventBus _eventBus;
+    private readonly IAuthHttpClient _authHttpClient;
+    private readonly ILogger<ProjectInvitationService> _logger;
     private const int TOKEN_LENGTH = 32;
     private const int EXPIRATION_DAYS = 7;
 
@@ -19,12 +25,18 @@ public sealed class ProjectInvitationService : IProjectInvitationService
         IProjectInvitationRepository invitationRepository,
         IProjectMemberRepository memberRepository,
         IProjectRepository projectRepository,
-        IProjectAuthorizationService authService)
+        IProjectAuthorizationService authService,
+        IEventBus eventBus,
+        IAuthHttpClient authHttpClient,
+        ILogger<ProjectInvitationService> logger)
     {
         _invitationRepository = invitationRepository;
         _memberRepository = memberRepository;
         _projectRepository = projectRepository;
         _authService = authService;
+        _eventBus = eventBus;
+        _authHttpClient = authHttpClient;
+        _logger = logger;
     }
 
     public async Task<ProjectInvitationModel> CreateInvitationAsync(
@@ -65,7 +77,7 @@ public sealed class ProjectInvitationService : IProjectInvitationService
         
         var expiresAt = DateTime.UtcNow.AddDays(EXPIRATION_DAYS);
 
-        return await _invitationRepository.CreateAsync(
+        var invitation = await _invitationRepository.CreateAsync(
             request.ProjectId,
             request.Email,
             request.Role,
@@ -74,6 +86,30 @@ public sealed class ProjectInvitationService : IProjectInvitationService
             invitedByName,
             expiresAt,
             cancellationToken);
+
+        try
+        {
+            var invitedUserId = await _memberRepository.GetUserIdByEmailAsync(request.Email, cancellationToken)
+                ?? await _authHttpClient.GetUserIdByEmailAsync(request.Email, cancellationToken);
+
+            var evt = new MemberInvitedEvent(
+                EventId: Guid.NewGuid().ToString(),
+                OccurredAt: DateTime.UtcNow,
+                ProjectId: project.IdProject,
+                ProjectName: project.Name,
+                InvitedEmail: request.Email,
+                RoleName: request.Role,
+                InvitedByUserId: invitedByUserId,
+                InvitedUserId: invitedUserId
+            );
+            await _eventBus.PublishAsync(evt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish MemberInvitedEvent for project {ProjectId}", request.ProjectId);
+        }
+
+        return invitation;
     }
 
     public async Task<ProjectInvitationModel?> GetInvitationByIdAsync(
@@ -138,6 +174,8 @@ public sealed class ProjectInvitationService : IProjectInvitationService
             throw new DuplicateMemberException(invitation.ProjectId, userId);
         }
 
+        var project = await _projectRepository.GetAsync(invitation.ProjectId, cancellationToken);
+
         await _memberRepository.AddMemberAsync(
             invitation.ProjectId,
             userId,
@@ -149,6 +187,23 @@ public sealed class ProjectInvitationService : IProjectInvitationService
         await _invitationRepository.AcceptAsync(invitation.IdProjectInvitation, cancellationToken);
         
         await _authService.InvalidateUserProjectsCacheAsync(userId, cancellationToken);
+
+        try
+        {
+            var evt = new MemberJoinedEvent(
+                EventId: Guid.NewGuid().ToString(),
+                OccurredAt: DateTime.UtcNow,
+                ProjectId: invitation.ProjectId,
+                ProjectName: project?.Name ?? "Unknown",
+                UserId: userId,
+                RoleName: ProjectRoles.GetNameFromId(invitation.Role)
+            );
+            await _eventBus.PublishAsync(evt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish MemberJoinedEvent for project {ProjectId}", invitation.ProjectId);
+        }
     }
 
     public async Task RejectInvitationAsync(

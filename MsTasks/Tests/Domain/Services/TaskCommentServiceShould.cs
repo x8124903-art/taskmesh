@@ -5,6 +5,7 @@ using MsTasks.Application.Models;
 using MsTasks.Domain;
 using MsTasks.Domain.Exceptions;
 using MsTasks.Domain.Services;
+using MsTasks.Infrastructure.EventBus;
 using MsTasks.Infrastructure.HttpClients;
 using MsTasks.Infrastructure.Repositories;
 
@@ -15,6 +16,7 @@ public sealed class TaskCommentServiceShould
     private readonly Mock<ITaskRepository> _taskRepositoryMock;
     private readonly Mock<ITaskCommentRepository> _taskCommentRepositoryMock;
     private readonly Mock<IProjectHttpClient> _projectHttpClientMock;
+    private readonly Mock<IEventBus> _eventBusMock;
     private readonly Mock<ILogger<TaskCommentService>> _loggerMock;
     private readonly TaskCommentService _service;
 
@@ -23,8 +25,9 @@ public sealed class TaskCommentServiceShould
         _taskRepositoryMock = new Mock<ITaskRepository>();
         _taskCommentRepositoryMock = new Mock<ITaskCommentRepository>();
         _projectHttpClientMock = new Mock<IProjectHttpClient>();
+        _eventBusMock = new Mock<IEventBus>();
         _loggerMock = new Mock<ILogger<TaskCommentService>>();
-        _service = new TaskCommentService(_taskRepositoryMock.Object, _taskCommentRepositoryMock.Object, _projectHttpClientMock.Object, _loggerMock.Object);
+        _service = new TaskCommentService(_taskRepositoryMock.Object, _taskCommentRepositoryMock.Object, _projectHttpClientMock.Object, _eventBusMock.Object, _loggerMock.Object);
     }
 
     [Fact]
@@ -126,7 +129,7 @@ public sealed class TaskCommentServiceShould
 
         _projectHttpClientMock
             .Setup(x => x.GetUserRoleInProjectAsync(GIVEN_PROJECT_ID, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Viewer"); // Even Viewers can read comments
+            .ReturnsAsync("Viewer"); 
 
         _taskCommentRepositoryMock
             .Setup(x => x.GetByTaskIdAsync(GIVEN_TASK_ID, It.IsAny<CancellationToken>()))

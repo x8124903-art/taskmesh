@@ -1,9 +1,11 @@
 using MsTasks.Application.Models;
 using MsTasks.Infrastructure.Data;
 using MsTasks.Infrastructure.Persistence;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MsTasks.Infrastructure.Repositories;
 
+[ExcludeFromCodeCoverage]
 public sealed class TaskCommentSqlRepository : ITaskCommentRepository
 {
     private readonly IDapperContext _context;

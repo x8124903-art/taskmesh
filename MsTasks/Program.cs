@@ -1,18 +1,54 @@
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.OpenApi.Models;
+using MassTransit;
 using MsTasks.Application.UseCases.Task;
 using MsTasks.Application.UseCases.TaskComment;
 using MsTasks.Domain.Services;
 using MsTasks.Infrastructure;
 using MsTasks.Infrastructure.Data;
+using MsTasks.Infrastructure.EventBus;
 using MsTasks.Infrastructure.HttpClients;
 using MsTasks.Infrastructure.Options;
 using MsTasks.Infrastructure.Repositories;
 using Polly;
 using Polly.Extensions.Http;
+using Serilog;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// OpenTelemetry
+var otlpEndpoint = builder.Configuration["Observability:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MsTasks"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint));
+        }
+    })
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter());
 
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
 
@@ -60,6 +96,19 @@ builder.Services.AddHttpClient<IProjectHttpClient, ProjectHttpClient>("MsProject
 .AddPolicyHandler(GetRetryPolicy())
 .AddPolicyHandler(GetCircuitBreakerPolicy());
 
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var connectionString = builder.Configuration["EventBus:ConnectionString"] 
+            ?? throw new InvalidOperationException("EventBus:ConnectionString not configured");
+        cfg.Host(new Uri(connectionString));
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+builder.Services.AddScoped<IEventBus, RabbitMqEventBus>();
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -75,6 +124,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+app.MapPrometheusScrapingEndpoint();
 
 app.UseExceptionHandler();
 

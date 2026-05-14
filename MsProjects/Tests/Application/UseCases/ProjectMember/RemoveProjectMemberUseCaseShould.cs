@@ -25,11 +25,11 @@ public sealed class RemoveProjectMemberUseCaseShould
     public async Task ExecuteAsync_RemovesMember_WhenAuthorized()
     {
         _authServiceMock.Setup(x => x.HasProjectRoleAsync(1, 100, It.IsAny<CancellationToken>(), "Owner", "Admin")).ReturnsAsync(true);
-        _memberServiceMock.Setup(x => x.RemoveMemberAsync(100, 5, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _memberServiceMock.Setup(x => x.RemoveMemberAsync(100, 5, 1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         await _useCase.ExecuteAsync(100, 5, 1, CancellationToken.None);
 
-        _memberServiceMock.Verify(x => x.RemoveMemberAsync(100, 5, It.IsAny<CancellationToken>()), Times.Once);
+        _memberServiceMock.Verify(x => x.RemoveMemberAsync(100, 5, 1, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

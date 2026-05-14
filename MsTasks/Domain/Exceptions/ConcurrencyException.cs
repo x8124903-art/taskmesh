@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MsTasks.Domain.Exceptions;
 
+[ExcludeFromCodeCoverage]
 public sealed class ConcurrencyException : DomainException
 {
     public ConcurrencyException()

@@ -2,9 +2,11 @@ using MsTasks.Application.Models;
 using MsTasks.Domain;
 using MsTasks.Infrastructure.Data;
 using MsTasks.Infrastructure.Persistence;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MsTasks.Infrastructure.Repositories;
 
+[ExcludeFromCodeCoverage]
 public sealed class TaskSqlRepository : ITaskRepository
 {
     private readonly IDapperContext _context;

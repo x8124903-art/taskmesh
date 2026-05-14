@@ -1,8 +1,5 @@
 namespace MsProjects.Application.Models;
 
-/// <summary>
-/// Model for project invitation responses
-/// </summary>
 public sealed record ProjectInvitationModel(
     int IdProjectInvitation,
     int ProjectId,

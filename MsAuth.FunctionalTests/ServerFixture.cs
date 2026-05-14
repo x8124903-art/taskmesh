@@ -1,7 +1,11 @@
 using System.Reflection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using MsAuth.Infrastructure.EventBus;
 using Testcontainers.MySql;
 
 namespace MsAuth.FunctionalTests;
@@ -44,13 +48,22 @@ public class ServerFixture : WebApplicationFactory<Program>, IAsyncLifetime
             "appsettings.Test.json");
         var entries = new List<KeyValuePair<string, string?>>
         {
-            new("Database:DefaultConnection", _mySqlContainer!.GetConnectionString())
+            new("Database:DefaultConnection", _mySqlContainer!.GetConnectionString()),
+            new("EventBus:ConnectionString", "amqp://guest:guest@localhost:5672"),
+            new("Observability:OtlpEndpoint", "")
         };
         builder
             .UseEnvironment("Test")
             .ConfigureAppConfiguration(c => c
                 .AddJsonFile(settingsFile, true)
-                .AddInMemoryCollection(entries!));
+                .AddInMemoryCollection(entries!))
+            .ConfigureTestServices(services =>
+            {
+                var eventBusMock = new Mock<IEventBus>();
+                eventBusMock.Setup(x => x.PublishAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+                services.AddSingleton(eventBusMock.Object);
+            });
     }
     
     private async Task GenerateMySql()

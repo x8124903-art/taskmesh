@@ -325,4 +325,87 @@ public sealed class AuthServiceShould
 
         result.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithValidRefreshToken_ReturnsTrue()
+    {
+        var loginResponse = new LoginResponse
+        {
+            AccessToken = "new-access",
+            RefreshToken = "new-refresh",
+            User = new User { Id = 1, Email = "a@a.com", Name = "A" }
+        };
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("old-refresh-token");
+        var handler = MockHttpMessageHandler.WithJsonResponse(loginResponse);
+        var service = CreateService(handler);
+
+        var result = await service.RefreshTokenAsync();
+
+        result.Should().BeTrue();
+        service.CurrentUser.Should().NotBeNull();
+        service.CurrentUser!.Email.Should().Be("a@a.com");
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithNoRefreshToken_ReturnsFalse()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync((string?)null);
+        var service = CreateService(MockHttpMessageHandler.WithStatusCode(HttpStatusCode.OK));
+
+        var result = await service.RefreshTokenAsync();
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithFailedResponse_ReturnsFalse()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("old-refresh");
+        var handler = MockHttpMessageHandler.WithStatusCode(HttpStatusCode.Unauthorized);
+        var service = CreateService(handler);
+
+        var result = await service.RefreshTokenAsync();
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithNullResponseBody_ReturnsFalse()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("old-refresh");
+        var handler = new MockHttpMessageHandler((req, _) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("null", System.Text.Encoding.UTF8, "application/json")
+            }));
+        var service = CreateService(handler);
+
+        var result = await service.RefreshTokenAsync();
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WhenException_ReturnsFalse()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ThrowsAsync(new Exception("JS error"));
+        var service = CreateService(MockHttpMessageHandler.WithStatusCode(HttpStatusCode.OK));
+
+        var result = await service.RefreshTokenAsync();
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EnsureInitializedAsync_CompletesImmediately()
+    {
+        var service = CreateService(MockHttpMessageHandler.WithStatusCode(HttpStatusCode.OK));
+
+        await service.EnsureInitializedAsync();
+    }
 }

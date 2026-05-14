@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Projects;
 
+[ExcludeFromCodeCoverage]
 public class ProjectMember
 {
     public int IdProjectMember { get; set; }

@@ -163,6 +163,88 @@ public sealed class TasksControllerShould
         noContentResult.StatusCode.Should().Be(204);
     }
 
+    [Fact]
+    public async Task ChangeStatus_Returns200_WhenUseCaseSucceeds()
+    {
+        // Arrange
+        const int GIVEN_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        var request = new ChangeStatusRequest(TaskStatus.InProgress);
+        var expected = new TaskModel(GIVEN_ID, "Task 1", "Description", 1, 10, TaskPriority.High, TaskStatus.InProgress, null, GIVEN_USER_ID, 2, DateTime.UtcNow, DateTime.UtcNow);
+
+        var useCaseMock = new Mock<IChangeTaskStatusUseCase>();
+        useCaseMock
+            .Setup(x => x.ExecuteAsync(GIVEN_ID, request, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var controller = CreateController(changeTaskStatusUseCase: useCaseMock.Object);
+        controller.ControllerContext = CreateControllerContext(GIVEN_USER_ID);
+
+        // Act
+        var result = await controller.ChangeStatus(GIVEN_ID, request, CancellationToken.None);
+
+        // Assert
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(200);
+        okResult.Value.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task Assign_Returns200_WhenUseCaseSucceeds()
+    {
+        // Arrange
+        const int GIVEN_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        const int GIVEN_ASSIGNEE_ID = 20;
+        var request = new AssignTaskRequest(GIVEN_ASSIGNEE_ID);
+        var expected = new TaskModel(GIVEN_ID, "Task 1", "Description", 1, GIVEN_ASSIGNEE_ID, TaskPriority.High, TaskStatus.Todo, null, GIVEN_USER_ID, 2, DateTime.UtcNow, DateTime.UtcNow);
+
+        var useCaseMock = new Mock<IAssignTaskUseCase>();
+        useCaseMock
+            .Setup(x => x.ExecuteAsync(GIVEN_ID, request, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var controller = CreateController(assignTaskUseCase: useCaseMock.Object);
+        controller.ControllerContext = CreateControllerContext(GIVEN_USER_ID);
+
+        // Act
+        var result = await controller.Assign(GIVEN_ID, request, CancellationToken.None);
+
+        // Assert
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(200);
+        okResult.Value.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task GetBoard_Returns200WithBoardResponse_WhenUseCaseSucceeds()
+    {
+        // Arrange
+        const int GIVEN_PROJECT_ID = 1;
+        const int GIVEN_USER_ID = 10;
+        var expected = new BoardResponse(new Dictionary<string, List<TaskModel>>
+        {
+            ["Todo"] = new List<TaskModel> { new(1, "Task 1", "Desc", GIVEN_PROJECT_ID, 10, TaskPriority.High, TaskStatus.Todo, null, 10, 1, DateTime.UtcNow, DateTime.UtcNow) },
+            ["InProgress"] = new List<TaskModel>()
+        });
+
+        var useCaseMock = new Mock<IGetBoardTasksUseCase>();
+        useCaseMock
+            .Setup(x => x.ExecuteAsync(GIVEN_PROJECT_ID, GIVEN_USER_ID, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var controller = CreateController(getBoardTasksUseCase: useCaseMock.Object);
+        controller.ControllerContext = CreateControllerContext(GIVEN_USER_ID);
+
+        // Act
+        var result = await controller.GetBoard(GIVEN_PROJECT_ID, CancellationToken.None);
+
+        // Assert
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(200);
+        okResult.Value.Should().BeEquivalentTo(expected);
+    }
+
     private static TasksController CreateController(
         ICreateTaskUseCase? createTaskUseCase = null,
         IGetTaskUseCase? getTaskUseCase = null,

@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WebApp.Models.Projects;
 
 /// <summary>
 /// Model for project invitation
 /// </summary>
+[ExcludeFromCodeCoverage]
 public class ProjectInvitation
 {
     public int IdProjectInvitation { get; set; }

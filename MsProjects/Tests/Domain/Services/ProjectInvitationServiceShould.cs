@@ -2,11 +2,14 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using MsProjects.Application.Models;
 using MsProjects.Domain.Services;
 using MsProjects.Domain.Services.Authorization;
 using MsProjects.Domain.Services.Exceptions;
+using MsProjects.Infrastructure.EventBus;
+using MsProjects.Infrastructure.HttpClients;
 using MsProjects.Infrastructure.Repositories;
 using Xunit;
 
@@ -18,6 +21,9 @@ public sealed class ProjectInvitationServiceShould
     private readonly Mock<IProjectMemberRepository> _memberRepoMock;
     private readonly Mock<IProjectRepository> _projectRepoMock;
     private readonly Mock<IProjectAuthorizationService> _authServiceMock;
+    private readonly Mock<IEventBus> _eventBusMock;
+    private readonly Mock<IAuthHttpClient> _authHttpClientMock;
+    private readonly Mock<ILogger<ProjectInvitationService>> _loggerMock;
     private readonly ProjectInvitationService _service;
 
     public ProjectInvitationServiceShould()
@@ -26,11 +32,17 @@ public sealed class ProjectInvitationServiceShould
         _memberRepoMock = new Mock<IProjectMemberRepository>();
         _projectRepoMock = new Mock<IProjectRepository>();
         _authServiceMock = new Mock<IProjectAuthorizationService>();
+        _eventBusMock = new Mock<IEventBus>();
+        _authHttpClientMock = new Mock<IAuthHttpClient>();
+        _loggerMock = new Mock<ILogger<ProjectInvitationService>>();
         _service = new ProjectInvitationService(
             _invitationRepoMock.Object,
             _memberRepoMock.Object,
             _projectRepoMock.Object,
-            _authServiceMock.Object);
+            _authServiceMock.Object,
+            _eventBusMock.Object,
+            _authHttpClientMock.Object,
+            _loggerMock.Object);
     }
 
     [Fact]

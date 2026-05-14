@@ -1,0 +1,101 @@
+@using WebApp.Services
+@using WebApp.Models.Notifications
+@inject INotificationApiService NotificationService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<MudBadge Content="@_unreadCount" Visible="@(_unreadCount > 0)" Color="Color.Error" Overlap="true">
+    <MudIconButton Icon="@Icons.Material.Filled.Notifications" 
+                   Color="Color.Inherit"
+                   OnClick="@ToggleDropdown" />
+</MudBadge>
+
+@if (_showDropdown)
+{
+    <MudOverlay Visible="true" OnClick="@CloseDropdown" 
+                LockScroll="false" DarkBackground="false" 
+                Style="z-index: 1299; background: transparent;" />
+    <NotificationDropdown 
+        IsOpen="@_showDropdown"
+        OnClose="@CloseDropdown"
+        OnNotificationRead="@OnNotificationRead"
+        OnNotificationDeleted="@OnNotificationDeleted" />
+}
+
+@code {
+    private int _unreadCount;
+    private bool _showDropdown;
+    private System.Threading.Timer? _pollingTimer;
+    private bool _isVisible = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUnreadCountAsync();
+        StartPolling();
+    }
+
+    private void StartPolling()
+    {
+        _pollingTimer = new System.Threading.Timer(
+            async _ => await PollUnreadCount(),
+            null,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(30));
+    }
+
+    private async Task PollUnreadCount()
+    {
+        if (!_isVisible)
+            return;
+
+        try
+        {
+            await LoadUnreadCountAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task LoadUnreadCountAsync()
+    {
+        try
+        {
+            var response = await NotificationService.GetUnreadCountAsync();
+            _unreadCount = response?.UnreadCount ?? 0;
+        }
+        catch
+        {
+            _unreadCount = 0;
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        _showDropdown = !_showDropdown;
+    }
+
+    private void CloseDropdown()
+    {
+        _showDropdown = false;
+        StateHasChanged();
+    }
+
+    private async Task OnNotificationRead()
+    {
+        await LoadUnreadCountAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnNotificationDeleted()
+    {
+        await LoadUnreadCountAsync();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _pollingTimer?.Dispose();
+    }
+}

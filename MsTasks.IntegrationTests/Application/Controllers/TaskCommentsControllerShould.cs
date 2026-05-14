@@ -23,7 +23,7 @@ public sealed class TaskCommentsControllerShould
         var request = new AddTaskCommentRequest("This is a test comment from integration test");
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "20"); // Member
+        _client.DefaultRequestHeaders.Add("X-User-Id", "20");
 
         var initialCount = await _fixture.CountTaskCommentsAsync(1);
 
@@ -52,7 +52,7 @@ public sealed class TaskCommentsControllerShould
         var request = new AddTaskCommentRequest("Viewer should not be able to comment");
 
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "30"); // Viewer
+        _client.DefaultRequestHeaders.Add("X-User-Id", "30");
 
         // Act
         var response = await _client.PostAsJsonAsync("/tasks/1/comments", request);
@@ -95,7 +95,6 @@ public sealed class TaskCommentsControllerShould
         comments.Should().NotBeEmpty();
         comments.Should().OnlyContain(c => c.TaskId == 1);
         
-        // Verify ordering (most recent first)
         var orderedComments = comments!.OrderByDescending(c => c.CreatedAt).ToList();
         comments.Should().BeEquivalentTo(orderedComments, options => options.WithStrictOrdering());
     }
@@ -108,7 +107,7 @@ public sealed class TaskCommentsControllerShould
         _client.DefaultRequestHeaders.Add("X-User-Id", "10");
 
         // Act
-        var response = await _client.GetAsync("/tasks/4/comments"); // Task with no comments
+        var response = await _client.GetAsync("/tasks/4/comments");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -123,7 +122,7 @@ public sealed class TaskCommentsControllerShould
     {
         // Arrange
         _client.DefaultRequestHeaders.Clear();
-        _client.DefaultRequestHeaders.Add("X-User-Id", "30"); // Viewer
+        _client.DefaultRequestHeaders.Add("X-User-Id", "30");
 
         // Act
         var response = await _client.GetAsync("/tasks/1/comments");

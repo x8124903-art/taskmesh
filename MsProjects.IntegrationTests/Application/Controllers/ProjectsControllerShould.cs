@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Testcontainers.MySql;
 using Testcontainers.Redis;
 
@@ -53,13 +54,28 @@ public class ProjectsControllerFixture : WebApplicationFactory<Program>, IAsyncL
         var entries = new List<KeyValuePair<string, string?>>
         {
             new("Database:DefaultConnection", _mySqlContainer!.GetConnectionString()),
-            new("RedisCache:ConnectionString", _redisContainer!.GetConnectionString())
+            new("RedisCache:ConnectionString", _redisContainer!.GetConnectionString()),
+            new("EventBus:ConnectionString", "amqp://guest:guest@localhost:5672"),
+            new("MsAuth:BaseUrl", "http://localhost:44310"),
+            new("Observability:OtlpEndpoint", "")
         };
         builder
             .UseEnvironment("Test")
             .ConfigureAppConfiguration(c => c
                 .AddJsonFile(settingsFile, true)
-                .AddInMemoryCollection(entries!));
+                .AddInMemoryCollection(entries!))
+            .ConfigureTestServices(services =>
+            {
+                var eventBusMock = new Mock<MsProjects.Infrastructure.EventBus.IEventBus>();
+                eventBusMock.Setup(x => x.PublishAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+                services.AddSingleton(eventBusMock.Object);
+
+                var authHttpClientMock = new Mock<MsProjects.Infrastructure.HttpClients.IAuthHttpClient>();
+                authHttpClientMock.Setup(x => x.GetUserIdByEmailAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                    .ReturnsAsync((int?)null);
+                services.AddSingleton(authHttpClientMock.Object);
+            });
     }
 
     private async Task GenerateMySql()
@@ -165,7 +181,6 @@ public sealed class ProjectsControllerShould(ProjectsControllerFixture fixture)
     {
         var client = CreateClient();
 
-        // Create a project first to ensure it exists
         var createRequest = new { name = "Update Target", description = "Desc", status = 1 };
         var createContent = new StringContent(
             JsonSerializer.Serialize(createRequest),
@@ -197,7 +212,6 @@ public sealed class ProjectsControllerShould(ProjectsControllerFixture fixture)
     {
         var client = CreateClient();
 
-        // Create a project to delete
         var createRequest = new { name = "Delete Target", description = "Desc", status = 1 };
         var createContent = new StringContent(
             JsonSerializer.Serialize(createRequest),

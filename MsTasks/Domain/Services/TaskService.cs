@@ -1,5 +1,9 @@
+using System.Text.Json;
+using Microsoft.Extensions.Caching.Distributed;
 using MsTasks.Application.Models;
+using MsTasks.Domain.Events;
 using MsTasks.Domain.Exceptions;
+using MsTasks.Infrastructure.EventBus;
 using MsTasks.Infrastructure.HttpClients;
 using MsTasks.Infrastructure.Repositories;
 
@@ -8,6 +12,8 @@ namespace MsTasks.Domain.Services;
 public sealed class TaskService(
     ITaskRepository taskRepository,
     IProjectHttpClient projectHttpClient,
+    IEventBus eventBus,
+    IDistributedCache cache,
     ILogger<TaskService> logger) : ITaskService
 {
     private static readonly string[] OwnerAdminRoles = ["Owner", "Admin"];
@@ -58,8 +64,48 @@ public sealed class TaskService(
 
         var createdTask = await taskRepository.CreateAsync(task, cancellationToken);
 
+        await InvalidateBoardCacheAsync(request.ProjectId, cancellationToken);
+
         logger.LogInformation("Task {TaskId} created by user {UserId} in project {ProjectId}", 
             createdTask.IdTask, currentUserId, request.ProjectId);
+
+        try
+        {
+            var evt = new TaskCreatedEvent(
+                EventId: Guid.NewGuid().ToString(),
+                OccurredAt: DateTime.UtcNow,
+                TaskId: createdTask.IdTask,
+                ProjectId: createdTask.ProjectId,
+                CreatedBy: currentUserId,
+                TaskTitle: createdTask.Title
+            );
+            await eventBus.PublishAsync(evt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish TaskCreatedEvent for task {TaskId}", createdTask.IdTask);
+        }
+
+        if (createdTask.AssignedToUserId.HasValue && createdTask.AssignedToUserId.Value != currentUserId)
+        {
+            try
+            {
+                var assignedEvt = new TaskAssignedEvent(
+                    EventId: Guid.NewGuid().ToString(),
+                    OccurredAt: DateTime.UtcNow,
+                    TaskId: createdTask.IdTask,
+                    ProjectId: createdTask.ProjectId,
+                    AssignedToUserId: createdTask.AssignedToUserId.Value,
+                    AssignedByUserId: currentUserId,
+                    TaskTitle: createdTask.Title
+                );
+                await eventBus.PublishAsync(assignedEvt, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to publish TaskAssignedEvent for task {TaskId}", createdTask.IdTask);
+            }
+        }
 
         return createdTask;
     }
@@ -167,8 +213,35 @@ public sealed class TaskService(
             }
 
             var result = await taskRepository.GetByIdAsync(taskId, cancellationToken);
+            
+            await InvalidateBoardCacheAsync(task.ProjectId, cancellationToken);
+            
             logger.LogInformation("Task {TaskId} updated by user {UserId}", taskId, currentUserId);
-            return result!;
+
+            if (result!.AssignedToUserId != task.AssignedToUserId
+                && result.AssignedToUserId.HasValue
+                && result.AssignedToUserId.Value != currentUserId)
+            {
+                try
+                {
+                    var assignedEvt = new TaskAssignedEvent(
+                        EventId: Guid.NewGuid().ToString(),
+                        OccurredAt: DateTime.UtcNow,
+                        TaskId: taskId,
+                        ProjectId: task.ProjectId,
+                        AssignedToUserId: result.AssignedToUserId.Value,
+                        AssignedByUserId: currentUserId,
+                        TaskTitle: result.Title
+                    );
+                    await eventBus.PublishAsync(assignedEvt, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to publish TaskAssignedEvent for task {TaskId}", taskId);
+                }
+            }
+
+            return result;
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("RowVersion"))
         {
@@ -195,6 +268,9 @@ public sealed class TaskService(
         }
 
         await taskRepository.SoftDeleteAsync(taskId, cancellationToken);
+        
+        await InvalidateBoardCacheAsync(task.ProjectId, cancellationToken);
+        
         logger.LogInformation("Task {TaskId} deleted by user {UserId}", taskId, currentUserId);
     }
 
@@ -224,9 +300,32 @@ public sealed class TaskService(
 
         await taskRepository.UpdateAssignmentAsync(taskId, request.AssignedToUserId, cancellationToken);
         
+        await InvalidateBoardCacheAsync(task.ProjectId, cancellationToken);
+        
         var updatedTask = await taskRepository.GetByIdAsync(taskId, cancellationToken);
         logger.LogInformation("Task {TaskId} assigned to user {AssignedToUserId} by user {UserId}", 
             taskId, request.AssignedToUserId, currentUserId);
+
+        if (request.AssignedToUserId.HasValue)
+        {
+            try
+            {
+                var evt = new TaskAssignedEvent(
+                    EventId: Guid.NewGuid().ToString(),
+                    OccurredAt: DateTime.UtcNow,
+                    TaskId: taskId,
+                    ProjectId: task.ProjectId,
+                    AssignedToUserId: request.AssignedToUserId.Value,
+                    AssignedByUserId: currentUserId,
+                    TaskTitle: updatedTask!.Title
+                );
+                await eventBus.PublishAsync(evt, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to publish TaskAssignedEvent for task {TaskId}", taskId);
+            }
+        }
 
         return updatedTask!;
     }
@@ -259,11 +358,36 @@ public sealed class TaskService(
             }
         }
 
+        var oldStatus = task.Status;
+        
         await taskRepository.UpdateStatusAsync(taskId, request.Status, cancellationToken);
+        
+        await InvalidateBoardCacheAsync(task.ProjectId, cancellationToken);
         
         var updatedTask = await taskRepository.GetByIdAsync(taskId, cancellationToken);
         logger.LogInformation("Task {TaskId} status changed to {Status} by user {UserId}", 
             taskId, request.Status, currentUserId);
+
+        try
+        {
+            var evt = new TaskStatusChangedEvent(
+                EventId: Guid.NewGuid().ToString(),
+                OccurredAt: DateTime.UtcNow,
+                TaskId: taskId,
+                ProjectId: task.ProjectId,
+                OldStatus: oldStatus.ToString(),
+                NewStatus: request.Status.ToString(),
+                ChangedByUserId: currentUserId,
+                TaskTitle: updatedTask!.Title,
+                AssignedToUserId: updatedTask.AssignedToUserId,
+                TaskCreatedByUserId: task.CreatedBy
+            );
+            await eventBus.PublishAsync(evt, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to publish TaskStatusChangedEvent for task {TaskId}", taskId);
+        }
 
         return updatedTask!;
     }
@@ -276,6 +400,15 @@ public sealed class TaskService(
             throw new UnauthorizedAccessException($"User does not have access to project {projectId}");
         }
 
+        var cacheKey = $"board:{projectId}";
+        var cachedBoard = await cache.GetStringAsync(cacheKey, cancellationToken);
+        
+        if (!string.IsNullOrEmpty(cachedBoard))
+        {
+            logger.LogInformation("Board for project {ProjectId} retrieved from cache by user {UserId}", projectId, currentUserId);
+            return JsonSerializer.Deserialize<BoardResponse>(cachedBoard)!;
+        }
+
         var tasks = await taskRepository.GetBoardByProjectIdAsync(projectId, cancellationToken);
 
         var columns = new Dictionary<string, List<TaskModel>>();
@@ -284,8 +417,23 @@ public sealed class TaskService(
             columns[status.ToString()] = tasks.Where(t => t.Status == status).ToList();
         }
 
-        logger.LogInformation("Board for project {ProjectId} retrieved by user {UserId}", projectId, currentUserId);
-        return new BoardResponse(columns);
+        var board = new BoardResponse(columns);
+        
+        var cacheOptions = new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2)
+        };
+        await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(board), cacheOptions, cancellationToken);
+
+        logger.LogInformation("Board for project {ProjectId} retrieved from database by user {UserId}", projectId, currentUserId);
+        return board;
+    }
+
+    private async Task InvalidateBoardCacheAsync(int projectId, CancellationToken cancellationToken)
+    {
+        var cacheKey = $"board:{projectId}";
+        await cache.RemoveAsync(cacheKey, cancellationToken);
+        logger.LogDebug("Board cache invalidated for project {ProjectId}", projectId);
     }
 
     private async Task<string?> GetUserRoleInProjectAsync(int projectId, int userId, CancellationToken cancellationToken)

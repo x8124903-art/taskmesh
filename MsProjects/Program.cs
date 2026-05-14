@@ -6,11 +6,50 @@ using MsProjects.Domain.Services;
 using MsProjects.Domain.Services.Authorization;
 using MsProjects.Infrastructure.Data;
 using MsProjects.Infrastructure.Repositories;
+using MsProjects.Infrastructure.EventBus;
 using MsProjects.Application.UseCases.Project;
 using MsProjects.Application.UseCases.ProjectMember;
 using MsProjects.Application.UseCases.ProjectInvitation;
+using MsProjects.Infrastructure.HttpClients;
+using MassTransit;
+using Polly;
+using Polly.Extensions.Http;
+using Serilog;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// OpenTelemetry
+var otlpEndpoint = builder.Configuration["Observability:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("MsProjects"))
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint));
+        }
+    })
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter());
 
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
 builder.Services.AddSingleton<IDapperContext, DapperContext>();
@@ -61,6 +100,28 @@ builder.Services.AddScoped<IAcceptProjectInvitationUseCase, AcceptProjectInvitat
 builder.Services.AddScoped<IRejectProjectInvitationUseCase, RejectProjectInvitationUseCase>();
 builder.Services.AddScoped<ICancelProjectInvitationUseCase, CancelProjectInvitationUseCase>();
 
+builder.Services.AddHttpClient<IAuthHttpClient, AuthHttpClient>("MsAuth", client =>
+{
+    var baseUrl = builder.Configuration["MsAuth:BaseUrl"];
+    client.BaseAddress = new Uri(baseUrl!);
+    client.Timeout = TimeSpan.FromSeconds(30);
+})
+.AddPolicyHandler(GetRetryPolicy())
+.AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var connectionString = builder.Configuration["EventBus:ConnectionString"] 
+            ?? throw new InvalidOperationException("EventBus:ConnectionString not configured");
+        cfg.Host(new Uri(connectionString));
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+builder.Services.AddScoped<IEventBus, RabbitMqEventBus>();
+
 builder.Services.AddExceptionHandler<MsProjects.Infrastructure.GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
@@ -82,6 +143,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "Healthy", service = "MsProjects" }));
+app.MapPrometheusScrapingEndpoint();
 
 app.UseExceptionHandler();
 
@@ -90,5 +152,19 @@ app.MapControllers();
 app.UseSwagger();
 app.UseSwaggerUI();
 app.Run();
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .WaitAndRetryAsync(1, retryAttempt => TimeSpan.FromMilliseconds(500));
+}
+
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+{
+    return HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
+}
 
 public partial class Program { }

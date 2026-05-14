@@ -1,0 +1,221 @@
+@using WebApp.Services
+@using WebApp.Models.Notifications
+@inject INotificationApiService NotificationService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<MudPopover Open="@IsOpen" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" 
+            Style="width: 400px; max-height: 600px; overflow-y: auto;">
+    <MudPaper Elevation="4" Class="pa-0">
+        <MudToolBar Dense="true">
+            <MudText Typo="Typo.h6">Notificaciones</MudText>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                           Size="Size.Small" 
+                           OnClick="@(() => OnClose.InvokeAsync())" />
+        </MudToolBar>
+        
+        <MudDivider />
+        
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!_notifications.Any())
+        {
+            <MudText Typo="Typo.body2" Class="pa-4 text-center">
+                No hay notificaciones
+            </MudText>
+        }
+        else
+        {
+            <MudList Clickable="true" Dense="true">
+                @foreach (var notification in _notifications)
+                {
+                    <MudListItem OnClick="@(() => HandleNotificationClickAsync(notification))"
+                                 Style="@GetBackgroundStyle(notification.IsRead)">
+                        <div class="d-flex align-center">
+                            <MudIcon Icon="@GetNotificationIcon(notification.Type)" 
+                                     Color="Color.Primary" 
+                                     Class="mr-3" />
+                            <div class="flex-grow-1">
+                                <MudText Typo="Typo.body2" Style="@GetFontWeight(notification.IsRead)">
+                                    @notification.Title
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @TruncateMessage(notification.Message, 60)
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    @GetRelativeTime(notification.CreatedAt)
+                                </MudText>
+                            </div>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(async (e) => await DeleteNotificationAsync(notification.IdNotification, e))"
+                                           Style="margin-left: auto;" />
+                        </div>
+                    </MudListItem>
+                    <MudDivider />
+                }
+            </MudList>
+        }
+    </MudPaper>
+</MudPopover>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnNotificationRead { get; set; }
+    [Parameter] public EventCallback OnNotificationDeleted { get; set; }
+
+    private List<NotificationModel> _notifications = new();
+    private bool _loading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen && !_loading)
+        {
+            await LoadNotificationsAsync();
+        }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        _loading = true;
+        try
+        {
+            var unreadResponse = await NotificationService.GetNotificationsAsync(
+                isRead: false,
+                type: null,
+                page: 1,
+                pageSize: 100);
+
+            var unread = unreadResponse?.Notifications?.ToList() ?? new List<NotificationModel>();
+
+            if (unread.Count < 10)
+            {
+                var remaining = 10 - unread.Count;
+                var readResponse = await NotificationService.GetNotificationsAsync(
+                    isRead: true,
+                    type: null,
+                    page: 1,
+                    pageSize: remaining);
+
+                var read = readResponse?.Notifications?.ToList() ?? new List<NotificationModel>();
+                unread.AddRange(read);
+            }
+
+            _notifications = unread;
+        }
+        catch
+        {
+            _notifications = new List<NotificationModel>();
+            Snackbar.Add("Error al cargar notificaciones", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task HandleNotificationClickAsync(NotificationModel notification)
+    {
+        if (!notification.IsRead)
+        {
+            try
+            {
+                await NotificationService.MarkAsReadAsync(notification.IdNotification);
+                await OnNotificationRead.InvokeAsync();
+            }
+            catch
+            {
+                Snackbar.Add("Error al marcar como leída", Severity.Error);
+            }
+        }
+
+        var url = GetNavigationUrl(notification);
+        if (!string.IsNullOrEmpty(url))
+        {
+            Navigation.NavigateTo(url, forceLoad: false);
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    private async Task DeleteNotificationAsync(int idNotification, MouseEventArgs e)
+    {
+        try
+        {
+            await NotificationService.DeleteAsync(idNotification);
+            await LoadNotificationsAsync();
+            await OnNotificationDeleted.InvokeAsync();
+        }
+        catch
+        {
+            Snackbar.Add("Error al eliminar notificación", Severity.Error);
+        }
+    }
+
+    private string GetNavigationUrl(NotificationModel notification)
+    {
+        if (notification.Type == "MemberInvited")
+            return "/invitations";
+
+        return notification.RelatedEntityType switch
+        {
+            "Task" => notification.RelatedProjectId.HasValue 
+                ? $"/projects/{notification.RelatedProjectId}/backlog" 
+                : string.Empty,
+            "Project" => $"/projects/{notification.RelatedEntityId}",
+            _ => string.Empty
+        };
+    }
+
+    private string GetNotificationIcon(string type)
+    {
+        return type switch
+        {
+            "TaskAssigned" => Icons.Material.Filled.Assignment,
+            "TaskStatusChanged" => Icons.Material.Filled.SwapHoriz,
+            "TaskCommentAdded" => Icons.Material.Filled.Comment,
+            "MemberInvited" => Icons.Material.Filled.Mail,
+            "MemberJoined" => Icons.Material.Filled.PersonAdd,
+            "MemberRemoved" => Icons.Material.Filled.PersonRemove,
+            _ => Icons.Material.Filled.Notifications
+        };
+    }
+
+    private string GetBackgroundStyle(bool isRead)
+    {
+        return isRead ? "" : "background-color: rgba(25, 118, 210, 0.15); border-left: 3px solid #1976D2;";
+    }
+
+    private string TruncateMessage(string message, int maxLength)
+    {
+        if (string.IsNullOrEmpty(message) || message.Length <= maxLength)
+            return message;
+
+        return message.Substring(0, maxLength) + "...";
+    }
+
+    private string GetRelativeTime(DateTime createdAt)
+    {
+        var timeSpan = DateTime.UtcNow - createdAt;
+
+        if (timeSpan.TotalSeconds < 60)
+            return "hace un momento";
+        if (timeSpan.TotalMinutes < 60)
+            return $"hace {(int)timeSpan.TotalMinutes} min";
+        if (timeSpan.TotalHours < 24)
+            return $"hace {(int)timeSpan.TotalHours} h";
+        if (timeSpan.TotalDays < 7)
+            return $"hace {(int)timeSpan.TotalDays} d";
+
+        return createdAt.ToString("dd/MM/yyyy");
+    }
+
+    private string GetFontWeight(bool isRead)
+    {
+        return isRead ? "font-weight: normal;" : "font-weight: bold;";
+    }
+}
