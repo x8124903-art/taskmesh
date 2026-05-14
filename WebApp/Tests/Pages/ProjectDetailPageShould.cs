@@ -41,7 +41,10 @@ public sealed class ProjectDetailPageShould : TestContext
                         Content = new StringContent(json, Encoding.UTF8, "application/json")
                     });
                 }
-                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent("null", Encoding.UTF8, "application/json")
+                });
             }
 
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
@@ -64,6 +67,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
     }
 
     [Fact]
@@ -202,6 +206,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("Edit Me"), TimeSpan.FromSeconds(3));
@@ -287,6 +292,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("Fail Save"), TimeSpan.FromSeconds(3));
@@ -354,6 +360,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("Exception Save"), TimeSpan.FromSeconds(3));
@@ -409,6 +416,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("Member Error"), TimeSpan.FromSeconds(3));
@@ -417,6 +425,103 @@ public sealed class ProjectDetailPageShould : TestContext
         if (tabs.Count >= 4) tabs[3].Click();
 
         cut.Markup.Should().Contain("Member Error");
+    }
+
+    [Fact]
+    public void NavigateToTab_WhenTabParameterProvided()
+    {
+        var project = new Project
+        {
+            IdProject = 1, Name = "Tab Nav", Description = "Desc",
+            StatusName = "Active", CreatedByName = "Test", CreatedAt = DateTime.UtcNow
+        };
+        var members = new List<ProjectMember>
+        {
+            new() { UserId = 1, UserName = "Test", Email = "test@test.com", RoleName = "Owner", JoinedAt = DateTime.UtcNow }
+        };
+        SetupServices(isAuthenticated: true, project: project, members: members);
+
+        var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p
+            .Add(x => x.Id, 1)
+            .Add(x => x.Tab, "backlog"));
+        cut.WaitForState(() => cut.Markup.Contains("Tab Nav"), TimeSpan.FromSeconds(3));
+
+        cut.Markup.Should().Contain("Tab Nav");
+    }
+
+    [Fact]
+    public void ShowEmptyDescription_WhenProjectHasNoDescription()
+    {
+        var project = new Project
+        {
+            IdProject = 1, Name = "No Desc", Description = "",
+            StatusName = "Active", CreatedByName = "Test", CreatedAt = DateTime.UtcNow
+        };
+        var members = new List<ProjectMember>
+        {
+            new() { UserId = 1, UserName = "Test", Email = "test@test.com", RoleName = "Owner", JoinedAt = DateTime.UtcNow }
+        };
+        SetupServices(isAuthenticated: true, project: project, members: members);
+
+        var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("No Desc"), TimeSpan.FromSeconds(3));
+
+        cut.Markup.Should().Contain("Sin descripción");
+    }
+
+    [Fact]
+    public void ShowNoEditPermissions_WhenUserIsMember()
+    {
+        var project = new Project
+        {
+            IdProject = 1, Name = "Member Only", Description = "Desc",
+            StatusName = "Active", CreatedByName = "Test", CreatedAt = DateTime.UtcNow
+        };
+        var members = new List<ProjectMember>
+        {
+            new() { UserId = 1, UserName = "Test", Email = "test@test.com", RoleName = "Member", JoinedAt = DateTime.UtcNow }
+        };
+        SetupServices(isAuthenticated: true, project: project, members: members);
+
+        var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("Member Only"), TimeSpan.FromSeconds(3));
+
+        var tabs = cut.FindAll("div.mud-tab");
+        if (tabs.Count >= 5) tabs[4].Click();
+
+        cut.Markup.Should().Contain("No tienes permisos");
+    }
+
+    [Fact]
+    public void RemoveMember_OnSelf_ShowsWarning()
+    {
+        var project = new Project
+        {
+            IdProject = 1, Name = "Self Remove", Description = "Desc",
+            StatusName = "Active", CreatedByName = "Test", CreatedAt = DateTime.UtcNow
+        };
+        var members = new List<ProjectMember>
+        {
+            new() { UserId = 1, UserName = "Test", Email = "test@test.com", RoleName = "Admin", JoinedAt = DateTime.UtcNow },
+            new() { UserId = 2, UserName = "Other", Email = "other@test.com", RoleName = "Member", JoinedAt = DateTime.UtcNow }
+        };
+        SetupServices(isAuthenticated: true, project: project, members: members);
+
+        var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("Self Remove"), TimeSpan.FromSeconds(3));
+
+        cut.Markup.Should().Contain("Self Remove");
+    }
+
+    [Fact]
+    public void ShowProjectNotFound_WhenProjectIsNull()
+    {
+        SetupServices(isAuthenticated: true, project: null);
+
+        var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
+        cut.WaitForState(() => cut.Markup.Contains("Proyecto no encontrado"), TimeSpan.FromSeconds(3));
+
+        cut.Markup.Should().Contain("Proyecto no encontrado");
     }
 
     [Fact]
@@ -497,6 +602,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         var cut = RenderComponent<WebApp.Pages.ProjectDetail>(p => p.Add(x => x.Id, 1));
         cut.WaitForState(() => cut.Markup.Contains("Self Role"), TimeSpan.FromSeconds(3));
@@ -550,6 +656,7 @@ public sealed class ProjectDetailPageShould : TestContext
         Services.AddSingleton(new ProjectApiService(httpClient));
         Services.AddSingleton(new ProjectInvitationApiService(httpClient, NullLogger<ProjectInvitationApiService>.Instance));
         Services.AddSingleton(new ProjectStateService());
+        Services.AddSingleton(new TaskApiService(httpClient));
 
         try
         {

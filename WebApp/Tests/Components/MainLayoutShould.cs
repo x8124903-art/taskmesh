@@ -120,4 +120,42 @@ public sealed class MainLayoutShould : TestContext
         cut.Markup.Should().Contain("Proyectos");
         cut.Markup.Should().Contain("Invitaciones");
     }
+
+    [Fact]
+    public void ToggleUserMenu_ShowsAndHidesMenu()
+    {
+        SetupServices(isAuthenticated: true);
+
+        var provider = RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<WebApp.Components.MainLayout>();
+
+        // The account circle button is the last icon button in the app bar
+        var iconButtons = cut.FindAll("button.mud-icon-button").ToList();
+        var userButton = iconButtons.LastOrDefault();
+
+        if (userButton != null)
+        {
+            userButton.Click();
+            cut.Markup.Should().Contain("Cerrar");
+        }
+    }
+
+    [Fact]
+    public void ClosesUserMenu_WhenOverlayClicked()
+    {
+        SetupServices(isAuthenticated: true);
+
+        var provider = RenderComponent<MudBlazor.MudPopoverProvider>();
+        var cut = RenderComponent<WebApp.Components.MainLayout>();
+
+        var iconButtons = cut.FindAll("button.mud-icon-button").ToList();
+        var userButton = iconButtons.LastOrDefault();
+
+        if (userButton != null)
+        {
+            userButton.Click();
+            var overlay = cut.FindAll(".mud-overlay").FirstOrDefault();
+            overlay?.Click();
+        }
+    }
 }

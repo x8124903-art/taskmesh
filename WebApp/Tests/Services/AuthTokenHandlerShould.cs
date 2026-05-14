@@ -91,15 +91,140 @@ public sealed class AuthTokenHandlerShould
             It.Is<object[]>(args => (string)args[0] == "accessToken")), Times.Once);
     }
 
+    [Fact]
+    public async Task SendAsync_On401_AttemptsTokenRefresh()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("my-token");
+        _authService.Setup(a => a.RefreshTokenAsync()).ReturnsAsync(true);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(_authService.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var callCount = 0;
+        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, serviceProvider, _logger.Object)
+        {
+            InnerHandler = new CallCountHandler(() =>
+            {
+                callCount++;
+                return callCount == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    : new HttpResponseMessage(HttpStatusCode.OK);
+            })
+        };
+        var client = new HttpClient(tokenHandler) { BaseAddress = new Uri("http://localhost") };
+
+        var response = await client.GetAsync("/test");
+
+        _authService.Verify(a => a.RefreshTokenAsync(), Times.Once);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task SendAsync_On401_RefreshFails_ReturnsUnauthorized()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("my-token");
+        _authService.Setup(a => a.RefreshTokenAsync()).ReturnsAsync(false);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(_authService.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, serviceProvider, _logger.Object)
+        {
+            InnerHandler = new TestInnerHandler(HttpStatusCode.Unauthorized)
+        };
+        var client = new HttpClient(tokenHandler) { BaseAddress = new Uri("http://localhost") };
+
+        var response = await client.GetAsync("/test");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task SendAsync_On401_RefreshEndpoint_DoesNotRetry()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("my-token");
+
+        var services = new ServiceCollection();
+        services.AddSingleton(_authService.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, serviceProvider, _logger.Object)
+        {
+            InnerHandler = new TestInnerHandler(HttpStatusCode.Unauthorized)
+        };
+        var client = new HttpClient(tokenHandler) { BaseAddress = new Uri("http://localhost") };
+
+        var response = await client.GetAsync("/api/v1/auth/refresh");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        _authService.Verify(a => a.RefreshTokenAsync(), Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_On401_WithPostContent_ClonesRequestCorrectly()
+    {
+        _jsRuntime.Setup(js => js.InvokeAsync<string?>("localStorage.getItem", It.IsAny<object[]>()))
+            .ReturnsAsync("my-token");
+        _authService.Setup(a => a.RefreshTokenAsync()).ReturnsAsync(true);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(_authService.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var callCount = 0;
+        var tokenHandler = new AuthTokenHandler(_jsRuntime.Object, serviceProvider, _logger.Object)
+        {
+            InnerHandler = new CallCountHandler(() =>
+            {
+                callCount++;
+                return callCount == 1
+                    ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                    : new HttpResponseMessage(HttpStatusCode.OK);
+            })
+        };
+        var client = new HttpClient(tokenHandler) { BaseAddress = new Uri("http://localhost") };
+
+        var response = await client.PostAsync("/test", new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        callCount.Should().Be(2);
+    }
+
     private class TestInnerHandler : HttpMessageHandler
     {
         [ThreadStatic]
         public static HttpRequestMessage? LastRequest;
+        private readonly HttpStatusCode _statusCode;
+
+        public TestInnerHandler(HttpStatusCode statusCode = HttpStatusCode.OK)
+        {
+            _statusCode = statusCode;
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             LastRequest = request;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            return Task.FromResult(new HttpResponseMessage(_statusCode));
+        }
+    }
+
+    private class CallCountHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpResponseMessage> _responseFactory;
+
+        public CallCountHandler(Func<HttpResponseMessage> responseFactory)
+        {
+            _responseFactory = responseFactory;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_responseFactory());
         }
     }
 }
