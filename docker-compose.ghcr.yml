@@ -13,10 +13,11 @@ services:
       - bash
       - -c
       - |
-        cat > /docker-entrypoint-initdb.d/init.sql << 'EOSQL'
+        cat > /tmp/init.sql << 'EOSQL'
         CREATE DATABASE IF NOT EXISTS taskmesh_auth;
         CREATE DATABASE IF NOT EXISTS taskmesh_projects;
         CREATE DATABASE IF NOT EXISTS taskmesh_tasks;
+        CREATE DATABASE IF NOT EXISTS taskmesh_notifications;
 
         USE taskmesh_auth;
 
@@ -127,10 +128,6 @@ services:
             FOREIGN KEY (Role) REFERENCES ProjectRole(IdProjectRole)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-        -- ========================================
-        -- TASKMESH_TASKS DATABASE
-        -- ========================================
-
         USE taskmesh_tasks;
 
         CREATE TABLE IF NOT EXISTS Task (
@@ -169,11 +166,6 @@ services:
             FOREIGN KEY (TaskId) REFERENCES Task(IdTask) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-        -- ============================================
-        -- NOTIFICATIONS DATABASE
-        -- ============================================
-        CREATE DATABASE IF NOT EXISTS taskmesh_notifications;
-
         USE taskmesh_notifications;
 
         CREATE TABLE IF NOT EXISTS Notification (
@@ -201,14 +193,33 @@ services:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
         EOSQL
-        exec docker-entrypoint.sh mysqld
+
+        # Start MySQL in the background
+        docker-entrypoint.sh mysqld &
+        MYSQL_PID=$$!
+
+        # Wait for the REAL MySQL server (with password) to be ready on port 3306
+        # The temporary init server uses port 0, so we must wait for port 3306
+        echo "Waiting for MySQL to be fully ready..."
+        until mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -h 127.0.0.1 --port 3306 -e "SELECT 1" &>/dev/null; do
+          sleep 3
+        done
+        echo "MySQL is ready. Running init SQL..."
+
+        # Always run init SQL (idempotent with IF NOT EXISTS / ON DUPLICATE KEY)
+        mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -h 127.0.0.1 --port 3306 < /tmp/init.sql
+        echo "Init SQL executed successfully."
+
+        # Wait for MySQL process to keep container alive
+        wait $$MYSQL_PID
     networks:
       - taskmesh-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost --silent && mysql -uroot -p$$MYSQL_ROOT_PASSWORD -e 'USE taskmesh_auth' 2>/dev/null"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
